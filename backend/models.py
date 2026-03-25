@@ -1,0 +1,86 @@
+from sqlalchemy import (
+    Column, Integer, String, Text, Boolean, DateTime, Date,
+    ForeignKey, ARRAY, func
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import relationship
+from backend.database import Base
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    email = Column(String(200), unique=True, nullable=False)
+    password_hash = Column(Text, nullable=False)
+    full_name = Column(String(200))
+    role = Column(String(20), default="user")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+
+    reports = relationship("Report", back_populates="user")
+    research_sessions = relationship("ResearchSession", back_populates="user")
+
+
+class Report(Base):
+    __tablename__ = "reports"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    title = Column(String(500), nullable=False)
+    subject = Column(Text, nullable=False)
+    report_type = Column(String(20), nullable=False)  # 'quick' | 'full'
+    tax_types = Column(ARRAY(Text))
+    time_period = Column(String(100))
+    content_html = Column(Text)
+    content_json = Column(JSONB)
+    citations = Column(JSONB, default=list)
+    model_used = Column(String(100))
+    provider_used = Column(String(50))
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
+    duration_ms = Column(Integer)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User", back_populates="reports")
+
+
+class TaxDoc(Base):
+    __tablename__ = "tax_docs"
+
+    id = Column(Integer, primary_key=True)
+    so_hieu = Column(String(200))
+    ten = Column(Text, nullable=False)
+    loai = Column(String(20))  # Luat|ND|TT|VBHN|CV
+    co_quan = Column(String(100))
+    ngay_ban_hanh = Column(Date)
+    hieu_luc_tu = Column(Date)
+    het_hieu_luc_tu = Column(Date)
+    tinh_trang = Column(String(50), default="con_hieu_luc")
+    replaced_by = Column(String(200))
+    replaced_date = Column(Date)
+    tax_types = Column(ARRAY(Text))
+    content_text = Column(Text)
+    content_html = Column(Text)
+    source = Column(String(50), default="upload")
+    dbvntax_id = Column(Integer)
+    link_tvpl = Column(Text)
+    created_at = Column(DateTime, server_default=func.now())
+
+
+class ResearchSession(Base):
+    __tablename__ = "research_sessions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    question = Column(Text, nullable=False)
+    tax_types = Column(ARRAY(Text))
+    time_period = Column(String(100))
+    answer_html = Column(Text)
+    citations = Column(JSONB, default=list)
+    model_used = Column(String(100))
+    duration_ms = Column(Integer)
+    created_at = Column(DateTime, server_default=func.now())
+
+    user = relationship("User", back_populates="research_sessions")
