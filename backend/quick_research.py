@@ -2,7 +2,9 @@
 import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.doc_context import get_relevant_docs, get_relevant_congvan
+from backend.doc_context import (
+    get_priority_docs_context, get_relevant_docs, get_relevant_congvan, get_priority_doc_ids
+)
 from backend.ai_provider import call_ai
 from backend.time_period import parse_time_period
 
@@ -17,9 +19,17 @@ QUICK_PROMPT = """CÂU HỎI: {question}
 GIAI ĐOẠN ÁP DỤNG: {time_period_label}
 (Chỉ trích dẫn quy định có hiệu lực trong giai đoạn này)
 
+=== VĂN BẢN ƯU TIÊN (admin đã chọn) ===
+{priority_ctx}
+
+=== VĂN BẢN TỪ DATABASE ===
 {doc_context}
 
+=== CÔNG VĂN HƯỚNG DẪN ===
 {cv_context}
+
+=== NGUỒN WEB (Perplexity) — dùng khi database không đủ ===
+{perplexity_ctx}
 
 YÊU CẦU TRẢ LỜI:
 1. Output HTML thuần túy — KHÔNG markdown
@@ -37,7 +47,6 @@ YÊU CẦU TRẢ LỜI:
 
 
 def _extract_keywords(question: str) -> list:
-    """Simple keyword extraction from question."""
     stopwords = {
         "của", "và", "là", "có", "được", "trong", "cho", "với", "theo", "về",
         "tôi", "bao", "nhiêu", "như", "thế", "nào", "tại", "sao", "khi",
@@ -59,20 +68,43 @@ async def run_quick_research(
     period = parse_time_period(time_period)
     keywords = _extract_keywords(question)
 
+    # 1. Priority docs context
+    priority_ctx = await get_priority_docs_context(
+        db, dbvntax_db, tax_types,
+        time_period_end=period["end_date"],
+        time_period_start=period.get("start_date"),
+    )
+
+    # 2. Get IDs already fetched to avoid duplication
+    priority_ids = await get_priority_doc_ids(db, tax_types)
+
+    # 3. dbvntax docs (exclude priority)
     doc_ctx = await get_relevant_docs(
         dbvntax_db,
         tax_types,
         keywords=keywords,
         time_period_end=period["end_date"],
         include_expired=period["include_expired"],
+        exclude_dbvntax_ids=priority_ids if priority_ids else None,
     )
     cv_ctx = await get_relevant_congvan(dbvntax_db, tax_types, keywords=keywords)
+
+    # 4. Perplexity fallback if both contexts are empty
+    perplexity_ctx = ""
+    if not priority_ctx and not doc_ctx:
+        from backend.perplexity import perplexity_search
+        perplexity_ctx = await perplexity_search(
+            f"Quy định thuế Việt Nam: {question} (giai đoạn {time_period or 'hiện tại'})",
+            model="sonar",
+        )
 
     prompt = QUICK_PROMPT.format(
         question=question,
         time_period_label=period["label"],
+        priority_ctx=priority_ctx or "(Không có văn bản ưu tiên)",
         doc_context=doc_ctx or "(Không có văn bản pháp luật liên quan trong database)",
-        cv_context=cv_ctx or "",
+        cv_context=cv_ctx or "(Không có công văn liên quan)",
+        perplexity_ctx=perplexity_ctx or "(Không sử dụng Perplexity)",
     )
 
     result = await call_ai(
@@ -84,8 +116,7 @@ async def run_quick_research(
 
     duration_ms = int((time.time() - start) * 1000)
 
-    # Extract doc/cv references from contexts for response metadata
-    tax_docs_used = _extract_doc_refs(doc_ctx)
+    tax_docs_used = _extract_doc_refs(priority_ctx) + _extract_doc_refs(doc_ctx)
     congvan_used = _extract_cv_refs(cv_ctx)
 
     # Save to DB
@@ -117,16 +148,14 @@ async def run_quick_research(
 
 
 def _extract_doc_refs(ctx: str) -> list:
-    """Extract so_hieu from formatted doc context."""
     if not ctx:
         return []
     import re
-    refs = re.findall(r'=== VĂN BẢN: (.+?) ===', ctx)
+    refs = re.findall(r'=== (?:\[ƯU TIÊN\] )?VĂN BẢN: (.+?) ===', ctx)
     return [{"so_hieu": r} for r in refs if r != "N/A"]
 
 
 def _extract_cv_refs(ctx: str) -> list:
-    """Extract so_hieu from formatted cv context."""
     if not ctx:
         return []
     import re

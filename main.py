@@ -9,7 +9,7 @@ from backend.database import engine, AsyncSessionLocal
 from backend.models import Base, User
 from backend.auth import hash_password
 from backend.config import APP_PASSWORD
-from backend.routes import auth, reports, research, tax_docs, admin
+from backend.routes import auth, reports, research, tax_docs, admin, priority_docs
 
 
 @asynccontextmanager
@@ -44,6 +44,7 @@ app.include_router(reports.router)
 app.include_router(research.router)
 app.include_router(tax_docs.router)
 app.include_router(admin.router)
+app.include_router(priority_docs.router)
 
 # Serve frontend
 FRONTEND_DIST = os.path.join(os.path.dirname(__file__), "frontend", "dist")

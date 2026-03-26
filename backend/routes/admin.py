@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
-from backend.database import get_db
+from backend.database import get_db, get_dbvntax_db
 from backend.models import User, Report, ResearchSession, TaxDoc
 from backend.auth import require_admin, hash_password
 
@@ -74,6 +74,25 @@ async def toggle_user_active(
     target.is_active = not target.is_active
     await db.commit()
     return {"id": target.id, "is_active": target.is_active}
+
+
+@router.get("/dbvntax-sac-thue")
+async def dbvntax_sac_thue(
+    admin: User = Depends(require_admin),
+    dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
+):
+    sql = """
+        SELECT unnest(sac_thue) as sac_thue, COUNT(*) as count
+        FROM documents
+        GROUP BY sac_thue
+        ORDER BY count DESC
+    """
+    try:
+        result = await dbvntax_db.execute(text(sql))
+        rows = result.mappings().all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return [{"sac_thue": r["sac_thue"], "count": r["count"]} for r in rows]
 
 
 @router.get("/stats")

@@ -21,3 +21,19 @@ body {
 .report-content tr:nth-child(even) td { @apply bg-gray-50; }
 .report-content strong { @apply font-semibold; }
 .report-content a { @apply text-brand underline; }
+
+/* Document HTML viewer (dbvntax content) */
+.doc-html-viewer {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1f2937;
+}
+.doc-html-viewer table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
+.doc-html-viewer td, .doc-html-viewer th { border: 1px solid #e5e7eb; padding: 6px 10px; }
+.doc-html-viewer th { background: #f3f4f6; font-weight: 600; }
+.doc-html-viewer h1, .doc-html-viewer h2, .doc-html-viewer h3 { color: #028a39; margin: 12px 0 6px; font-weight: 600; }
+.doc-html-viewer h1 { font-size: 1.2em; }
+.doc-html-viewer h2 { font-size: 1.1em; }
+.doc-html-viewer p { margin-bottom: 8px; }
+.doc-html-viewer ul, .doc-html-viewer ol { padding-left: 20px; margin-bottom: 8px; }
+.doc-html-viewer li { margin-bottom: 4px; }

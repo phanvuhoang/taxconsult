@@ -79,6 +79,23 @@ export const api = {
   createUser: (body) => request('POST', '/admin/users', body),
   toggleUserActive: (id) => request('PATCH', `/admin/users/${id}/toggle-active`),
   adminStats: () => request('GET', '/admin/stats'),
+  getDbvntaxSacThue: () => request('GET', '/admin/dbvntax-sac-thue'),
+
+  // Priority Docs
+  listPriorityDocs: (sac_thue) =>
+    request('GET', `/priority-docs${sac_thue ? '?sac_thue=' + encodeURIComponent(sac_thue) : ''}`),
+  addPriorityDoc: (body) => request('POST', '/priority-docs', body),
+  updatePriorityDoc: (id, body) => request('PATCH', `/priority-docs/${id}`, body),
+  deletePriorityDoc: (id) => request('DELETE', `/priority-docs/${id}`),
+  getPriorityDocContent: (dbvntax_id) => request('GET', `/priority-docs/content/${dbvntax_id}`),
+
+  // Tax Docs — dbvntax browse
+  browseDbvntax: (sac_thue, loai) => {
+    const params = new URLSearchParams({ sac_thue })
+    if (loai) params.append('loai', loai)
+    return request('GET', `/tax-docs/dbvntax-browse?${params}`)
+  },
+  getDbvntaxContent: (id) => request('GET', `/tax-docs/dbvntax-content/${id}`),
 }
 
 export function streamFullReport(jobId, onEvent, onError, onDone) {

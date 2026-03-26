@@ -187,6 +187,59 @@ async def search_dbvntax(
     return [dict(r) for r in rows]
 
 
+@router.get("/dbvntax-browse")
+async def browse_dbvntax(
+    sac_thue: str = Query(...),
+    loai: Optional[str] = Query(None),
+    user: User = Depends(get_current_user),
+    dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
+):
+    from sqlalchemy import text
+    params = {"sac_thue": [sac_thue]}
+    where = "sac_thue && ARRAY[:sac_thue]::varchar[]"
+    if loai:
+        where += " AND loai = :loai"
+        params["loai"] = loai
+    sql = f"""
+        SELECT id, so_hieu, ten, loai, co_quan,
+               ngay_ban_hanh::text, hieu_luc_tu::text, het_hieu_luc_tu::text,
+               tinh_trang, link_tvpl, importance
+        FROM documents
+        WHERE {where}
+        ORDER BY importance ASC, ngay_ban_hanh DESC
+        LIMIT 100
+    """
+    try:
+        result = await dbvntax_db.execute(text(sql), params)
+        rows = result.mappings().all()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    return [dict(r) for r in rows]
+
+
+@router.get("/dbvntax-content/{doc_id}")
+async def get_dbvntax_content(
+    doc_id: int,
+    user: User = Depends(get_current_user),
+    dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
+):
+    from sqlalchemy import text
+    result = await dbvntax_db.execute(
+        text("SELECT id, so_hieu, ten, noi_dung FROM documents WHERE id = :id"),
+        {"id": doc_id},
+    )
+    row = result.mappings().one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Not found")
+    row = dict(row)
+    return {
+        "id": row["id"],
+        "so_hieu": row.get("so_hieu"),
+        "ten": row.get("ten"),
+        "noi_dung_html": row.get("noi_dung") or "",
+    }
+
+
 def _extract_docx(content: bytes) -> str:
     from docx import Document
     doc = Document(io.BytesIO(content))

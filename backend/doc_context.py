@@ -93,12 +93,107 @@ def format_cv_for_context(cv: dict) -> str:
     return "\n".join(lines)
 
 
+async def get_priority_docs_context(
+    db,
+    dbvntax_db,
+    tax_types: list,
+    time_period_end: str = None,
+    time_period_start: str = None,
+    include_partial: bool = True,
+) -> str:
+    """
+    Pull priority docs (admin-curated) from taxconsult DB, fetch content from dbvntax,
+    format as high-priority context block for AI prompts.
+    Returns (context_str, list_of_dbvntax_ids)
+    """
+    from sqlalchemy import text, select
+
+    # Build filter on priority_docs
+    from backend.models import PriorityDoc
+
+    sac_thue_values = []
+    for tt in tax_types:
+        sac_thue_values.extend(SAC_THUE_MAP.get(tt, [tt]))
+
+    q = select(PriorityDoc).order_by(PriorityDoc.sort_order, PriorityDoc.id)
+    result = await db.execute(q)
+    all_pds = result.scalars().all()
+
+    # Filter by sac_thue match
+    filtered = []
+    for pd in all_pds:
+        pd_sac = pd.sac_thue or []
+        if any(s in pd_sac for s in sac_thue_values) or not sac_thue_values:
+            filtered.append(pd)
+
+    # Filter by time period
+    if time_period_end or time_period_start:
+        from datetime import date
+        def parse_d(s):
+            try:
+                return date.fromisoformat(s) if s else None
+            except Exception:
+                return None
+        end_d = parse_d(time_period_end)
+        start_d = parse_d(time_period_start)
+        kept = []
+        for pd in filtered:
+            # VB phải có hiệu lực trước hoặc trong giai đoạn
+            if end_d and pd.hieu_luc_tu and pd.hieu_luc_tu > end_d:
+                continue
+            # VB chưa hết hạn trước giai đoạn bắt đầu
+            if start_d and pd.hieu_luc_den and pd.hieu_luc_den < start_d:
+                continue
+            kept.append(pd)
+        filtered = kept
+
+    if not filtered:
+        return ""
+
+    parts = ["## VĂN BẢN ƯU TIÊN (admin đã chọn — ưu tiên cao nhất)\n"]
+    for pd in filtered:
+        # Fetch noi_dung from dbvntax
+        try:
+            row = await dbvntax_db.execute(
+                text("SELECT noi_dung FROM documents WHERE id = :id"),
+                {"id": pd.dbvntax_id},
+            )
+            noi_dung_row = row.one_or_none()
+            noi_dung_html = noi_dung_row[0] if noi_dung_row else ""
+        except Exception:
+            noi_dung_html = ""
+
+        lines = [
+            f"=== [ƯU TIÊN] VĂN BẢN: {pd.so_hieu or 'N/A'} ===",
+            f"Tên: {pd.ten}",
+            f"Loại: {pd.loai or ''} | Cơ quan: {pd.co_quan or ''}",
+            f"Hiệu lực: {pd.hieu_luc_tu or ''} → {pd.hieu_luc_den or 'nay'}",
+        ]
+        if pd.thay_the_boi:
+            scope = f" ({pd.pham_vi_het_hieu_luc})" if pd.pham_vi_het_hieu_luc else ""
+            lines.append(f"⚠️ Bị thay thế bởi: {pd.thay_the_boi}{scope}")
+        if pd.ghi_chu_hieu_luc:
+            lines.append(f"📋 Ghi chú: {pd.ghi_chu_hieu_luc}")
+        if pd.link_tvpl:
+            lines.append(f"LINK: {pd.link_tvpl}")
+        if noi_dung_html:
+            content = strip_html_tvpl(noi_dung_html)
+            if len(content) > MAX_DOC_CHARS:
+                content = content[:MAX_DOC_CHARS] + "\n...[nội dung tiếp theo, đã cắt bớt]"
+            lines.append(f"\nNỘI DUNG:\n{content}")
+        lines.append("=" * 50)
+        parts.append("\n".join(lines))
+
+    return "\n".join(parts)
+
+
 async def get_relevant_docs(
     dbvntax_db,
     tax_types: list,
     keywords: list = None,
     time_period_end: str = None,
     include_expired: bool = False,
+    exclude_dbvntax_ids: list = None,
 ) -> str:
     """
     Query dbvntax for relevant documents and format as context string.
@@ -121,6 +216,10 @@ async def get_relevant_docs(
     if time_period_end:
         conditions.append("(d.hieu_luc_tu IS NULL OR d.hieu_luc_tu <= :period_end)")
         params["period_end"] = time_period_end
+
+    if exclude_dbvntax_ids:
+        conditions.append("d.id != ALL(:exclude_ids)")
+        params["exclude_ids"] = exclude_dbvntax_ids
 
     if keywords:
         conditions.append(
@@ -253,3 +352,12 @@ async def verify_legal_refs_db(html: str, dbvntax_db) -> str:
             )
 
     return html
+
+
+async def get_priority_doc_ids(db, tax_types: list) -> list:
+    """Return list of dbvntax_ids for all priority docs (used to exclude from get_relevant_docs)."""
+    from sqlalchemy import select
+    from backend.models import PriorityDoc
+
+    result = await db.execute(select(PriorityDoc.dbvntax_id))
+    return list(result.scalars().all())

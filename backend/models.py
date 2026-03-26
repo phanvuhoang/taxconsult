@@ -69,6 +69,35 @@ class TaxDoc(Base):
     created_at = Column(DateTime, server_default=func.now())
 
 
+class PriorityDoc(Base):
+    __tablename__ = "priority_docs"
+
+    id = Column(Integer, primary_key=True)
+    dbvntax_id = Column(Integer, nullable=False, unique=True)
+    so_hieu = Column(String(200))
+    ten = Column(Text, nullable=False)
+    loai = Column(String(20))          # Luat | ND | TT | VBHN | CV
+    co_quan = Column(String(100))
+    sac_thue = Column(ARRAY(Text))     # ['TNDN', 'GTGT', ...]
+
+    # Hiệu lực
+    hieu_luc_tu = Column(Date)
+    hieu_luc_den = Column(Date)        # NULL = còn hiệu lực
+
+    # Thay thế
+    thay_the_boi = Column(String(200))
+    pham_vi_het_hieu_luc = Column(String(20))  # "toan_bo" | "mot_phan" | NULL
+    ghi_chu_hieu_luc = Column(Text)
+
+    # Link
+    link_tvpl = Column(Text)
+
+    # Sort
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 class ResearchSession(Base):
     __tablename__ = "research_sessions"
 

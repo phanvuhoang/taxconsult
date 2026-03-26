@@ -7,7 +7,7 @@ const NAV = [
   { to: '/quick-research', label: 'Quick Research', icon: '🔍' },
   { to: '/full-report', label: 'Full Report', icon: '📊' },
   { to: '/reports', label: 'Lịch sử', icon: '📁' },
-  { to: '/tax-docs', label: 'Tax Docs', icon: '📚', adminOnly: true },
+  { to: '/tax-docs', label: 'Văn bản', icon: '📚', adminOnly: true },
   { to: '/settings', label: 'Cài đặt', icon: '⚙️' },
 ]
 

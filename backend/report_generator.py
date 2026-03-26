@@ -5,7 +5,9 @@ import time
 from typing import AsyncGenerator
 
 from backend.config import DEFAULT_SECTIONS
-from backend.doc_context import get_relevant_docs, get_relevant_congvan
+from backend.doc_context import (
+    get_priority_docs_context, get_relevant_docs, get_relevant_congvan, get_priority_doc_ids
+)
 from backend.ai_provider import stream_ai
 from backend.perplexity import perplexity_search
 from backend.time_period import parse_time_period
@@ -37,7 +39,10 @@ SECTION_PROMPT_TAX = """Viết PHẦN: "{section_title}"
 Chủ đề phân tích: {subject} ({mode})
 Giai đoạn áp dụng: {time_period}
 
-=== VĂN BẢN PHÁP LUẬT TỪ DATABASE (ưu tiên sử dụng) ===
+=== VĂN BẢN ƯU TIÊN (admin đã chọn — ưu tiên cao nhất) ===
+{priority_context}
+
+=== VĂN BẢN PHÁP LUẬT TỪ DATABASE ===
 {tax_docs_context}
 
 === CÔNG VĂN HƯỚNG DẪN TỪ DATABASE ===
@@ -48,7 +53,7 @@ Giai đoạn áp dụng: {time_period}
 
 YÊU CẦU TUYỆT ĐỐI:
 1. Output HTML thuần túy — bắt đầu bằng <h2>{section_number}. {section_title}</h2>
-2. ƯU TIÊN DỮ LIỆU TỪ DATABASE hơn Perplexity
+2. ƯU TIÊN VĂN BẢN ƯU TIÊN hơn mọi nguồn khác
 3. Trích dẫn ĐIỀU KHOẢN CỤ THỂ: "theo điểm X, khoản Y, Điều Z, NĐ/TT số..."
 4. Nếu quy định thay đổi theo thời gian → bảng so sánh Before/After:
    <table><tr><th>Giai đoạn</th><th>Quy định</th><th>Văn bản</th></tr>...</table>
@@ -85,6 +90,7 @@ async def _gather_section_context(
     period: dict,
     dbvntax_db,
     sonar_model: str,
+    exclude_dbvntax_ids: list = None,
 ) -> dict:
     """Gather all context for a single section in parallel."""
     keywords = _quick_keywords(subject)
@@ -101,6 +107,7 @@ async def _gather_section_context(
                 dbvntax_db, tax_types, keywords=keywords,
                 time_period_end=period["end_date"],
                 include_expired=period["include_expired"],
+                exclude_dbvntax_ids=exclude_dbvntax_ids,
             )
         )
         tasks.append(get_relevant_congvan(dbvntax_db, tax_types, keywords=keywords))
@@ -148,11 +155,26 @@ async def generate_full_report(
 
     start_time = time.time()
 
-    # Phase 1: gather all contexts in parallel
+    # Phase 0: fetch priority docs context once (shared across all sections)
     yield _sse({"type": "phase", "message": "Đang thu thập dữ liệu..."})
+    priority_ctx = ""
+    exclude_ids = []
+    try:
+        priority_ctx = await get_priority_docs_context(
+            db, dbvntax_db, tax_types,
+            time_period_end=period["end_date"],
+            time_period_start=period.get("start_date"),
+        )
+        exclude_ids = await get_priority_doc_ids(db, tax_types)
+    except Exception:
+        pass
 
+    # Phase 1: gather all contexts in parallel
     context_tasks = [
-        _gather_section_context(sec, subject, tax_types, period, dbvntax_db, sonar_model)
+        _gather_section_context(
+            sec, subject, tax_types, period, dbvntax_db, sonar_model,
+            exclude_dbvntax_ids=exclude_ids if exclude_ids else None,
+        )
         for sec in enabled_sections
     ]
     all_contexts = await asyncio.gather(*context_tasks, return_exceptions=True)
@@ -178,6 +200,7 @@ async def generate_full_report(
                 subject=subject,
                 mode=report_type_mode,
                 time_period=period["label"],
+                priority_context=priority_ctx or "(Không có văn bản ưu tiên)",
                 tax_docs_context=ctx["docs"] or "(Không có dữ liệu)",
                 congvan_context=ctx["congvan"] or "(Không có dữ liệu)",
                 perplexity_context=ctx["perplexity"] or "(Không có dữ liệu)",
