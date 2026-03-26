@@ -5,7 +5,7 @@ from sqlalchemy import select, func, text
 
 from backend.database import get_db, get_dbvntax_db
 from backend.models import User, Report, ResearchSession, TaxDoc
-from backend.auth import require_admin, hash_password
+from backend.auth import require_admin, get_current_user, hash_password
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
