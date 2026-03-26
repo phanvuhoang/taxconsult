@@ -189,3 +189,112 @@ async def get_priority_doc_content(
         "ten": doc.get("ten"),
         "noi_dung_html": doc.get("noi_dung") or "",
     }
+
+
+@router.get("/suggest/{dbvntax_id}")
+async def suggest_priority_metadata(
+    dbvntax_id: int,
+    user: User = Depends(require_admin),
+    dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
+):
+    """
+    Đọc hieu_luc_index từ dbvntax + AI phân tích → trả về suggested metadata.
+    """
+    import json as _json
+    import re
+
+    result = await dbvntax_db.execute(
+        text("""
+            SELECT so_hieu, ten, loai, co_quan,
+                   hieu_luc_tu::text, het_hieu_luc_tu::text,
+                   tinh_trang, hieu_luc_index, noi_dung
+            FROM documents WHERE id = :id
+        """),
+        {"id": dbvntax_id},
+    )
+    row = result.mappings().one_or_none()
+    if not row:
+        raise HTTPException(status_code=404, detail="Document not found")
+    row = dict(row)
+
+    # Step 1: Parse hieu_luc_index (không cần AI)
+    hli = row.get("hieu_luc_index") or {}
+    if isinstance(hli, str):
+        try:
+            hli = _json.loads(hli)
+        except Exception:
+            hli = {}
+
+    suggestion = {
+        "hieu_luc_tu": row.get("hieu_luc_tu"),
+        "hieu_luc_den": row.get("het_hieu_luc_tu"),
+        "thay_the_boi": None,
+        "pham_vi_het_hieu_luc": None,
+        "ghi_chu_hieu_luc": None,
+        "source": "hieu_luc_index",
+    }
+
+    thay_the = hli.get("van_ban_thay_the", [])
+    if thay_the:
+        first = thay_the[0]
+        suggestion["thay_the_boi"] = first if isinstance(first, str) else str(first)
+
+    hieu_luc_arr = hli.get("hieu_luc", [])
+    if hieu_luc_arr:
+        pham_vi_list = [h.get("pham_vi", "") for h in hieu_luc_arr if h.get("pham_vi")]
+        if pham_vi_list:
+            first_pv = pham_vi_list[0].lower()
+            if "toàn bộ" in first_pv or "toan bo" in first_pv:
+                suggestion["pham_vi_het_hieu_luc"] = "toan_bo"
+            elif any(kw in first_pv for kw in ["một phần", "mot phan", "khoản", "điều", "điểm"]):
+                suggestion["pham_vi_het_hieu_luc"] = "mot_phan"
+
+    if hli.get("tom_tat_hieu_luc"):
+        suggestion["ghi_chu_hieu_luc"] = hli["tom_tat_hieu_luc"]
+
+    # Step 2: Nếu hieu_luc_index không đủ → dùng AI
+    needs_ai = (
+        not suggestion["hieu_luc_tu"]
+        and not suggestion["hieu_luc_den"]
+        and not suggestion["thay_the_boi"]
+    )
+    if needs_ai and row.get("noi_dung"):
+        from backend.doc_context import strip_html_tvpl
+        from backend.ai_provider import call_ai
+
+        content_text = strip_html_tvpl(row["noi_dung"])
+        content_tail = content_text[-3000:] if len(content_text) > 3000 else content_text
+
+        ai_prompt = f"""Văn bản: {row['so_hieu']} — {row['ten']}
+Trạng thái hiện tại: {row.get('tinh_trang', '')}
+
+PHẦN CUỐI VĂN BẢN:
+{content_tail}
+
+Hãy trích xuất thông tin hiệu lực và trả về JSON (chỉ JSON, không giải thích):
+{{
+  "hieu_luc_tu": "YYYY-MM-DD hoặc null",
+  "hieu_luc_den": "YYYY-MM-DD hoặc null (null nếu còn hiệu lực)",
+  "thay_the_boi": "số hiệu văn bản thay thế hoặc null",
+  "pham_vi_het_hieu_luc": "toan_bo hoặc mot_phan hoặc null",
+  "ghi_chu_hieu_luc": "tóm tắt ngắn về hiệu lực (tối đa 200 ký tự)"
+}}"""
+
+        try:
+            ai_result = await call_ai(
+                messages=[{"role": "user", "content": ai_prompt}],
+                system="Bạn là chuyên gia pháp lý, trích xuất thông tin chính xác từ văn bản luật Việt Nam.",
+                model_tier="haiku",
+                max_tokens=512,
+            )
+            json_match = re.search(r'\{.*\}', ai_result["content"], re.DOTALL)
+            if json_match:
+                ai_data = _json.loads(json_match.group())
+                for k in ["hieu_luc_tu", "hieu_luc_den", "thay_the_boi", "pham_vi_het_hieu_luc", "ghi_chu_hieu_luc"]:
+                    if ai_data.get(k) and not suggestion.get(k):
+                        suggestion[k] = ai_data[k]
+                suggestion["source"] = "ai"
+        except Exception:
+            pass
+
+    return suggestion
