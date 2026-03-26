@@ -229,7 +229,7 @@ async def browse_dbvntax(
                tinh_trang, link_tvpl, importance
         FROM documents
         WHERE {where}
-        ORDER BY importance ASC, ngay_ban_hanh DESC
+        ORDER BY ngay_ban_hanh DESC NULLS LAST
         LIMIT 100
     """
     try:

@@ -28,7 +28,7 @@ GIAI ĐOẠN ÁP DỤNG: {time_period_label}
 === CÔNG VĂN HƯỚNG DẪN ===
 {cv_context}
 
-=== NGUỒN WEB (Perplexity) — dùng khi database không đủ ===
+=== NGUỒN WEB (Perplexity — bổ sung thêm, tổng hợp cùng database) ===
 {perplexity_ctx}
 
 YÊU CẦU TRẢ LỜI:
@@ -68,35 +68,37 @@ async def run_quick_research(
     period = parse_time_period(time_period)
     keywords = _extract_keywords(question)
 
-    # 1. Priority docs context
-    priority_ctx = await get_priority_docs_context(
-        db, dbvntax_db, tax_types,
-        time_period_end=period["end_date"],
-        time_period_start=period.get("start_date"),
-    )
+    # Chạy tất cả song song
+    from backend.perplexity import perplexity_search
+    import asyncio
 
-    # 2. Get IDs already fetched to avoid duplication
     priority_ids = await get_priority_doc_ids(db, tax_types)
 
-    # 3. dbvntax docs (exclude priority)
-    doc_ctx = await get_relevant_docs(
-        dbvntax_db,
-        tax_types,
-        keywords=keywords,
-        time_period_end=period["end_date"],
-        include_expired=period["include_expired"],
-        exclude_dbvntax_ids=priority_ids if priority_ids else None,
-    )
-    cv_ctx = await get_relevant_congvan(dbvntax_db, tax_types, keywords=keywords)
-
-    # 4. Perplexity fallback if both contexts are empty
-    perplexity_ctx = ""
-    if not priority_ctx and not doc_ctx:
-        from backend.perplexity import perplexity_search
-        perplexity_ctx = await perplexity_search(
+    results = await asyncio.gather(
+        get_priority_docs_context(
+            db, dbvntax_db, tax_types,
+            time_period_end=period["end_date"],
+            time_period_start=period.get("start_date"),
+        ),
+        get_relevant_docs(
+            dbvntax_db, tax_types,
+            keywords=keywords,
+            time_period_end=period["end_date"],
+            include_expired=period["include_expired"],
+            exclude_dbvntax_ids=priority_ids if priority_ids else None,
+        ),
+        get_relevant_congvan(dbvntax_db, tax_types, keywords=keywords),
+        perplexity_search(
             f"Quy định thuế Việt Nam: {question} (giai đoạn {time_period or 'hiện tại'})",
             model="sonar",
-        )
+        ),
+        return_exceptions=True,
+    )
+
+    priority_ctx = results[0] if not isinstance(results[0], Exception) else ""
+    doc_ctx      = results[1] if not isinstance(results[1], Exception) else ""
+    cv_ctx       = results[2] if not isinstance(results[2], Exception) else ""
+    perplexity_ctx = results[3] if not isinstance(results[3], Exception) else ""
 
     prompt = QUICK_PROMPT.format(
         question=question,
