@@ -78,7 +78,7 @@ async def toggle_user_active(
 
 @router.get("/dbvntax-sac-thue")
 async def dbvntax_sac_thue(
-    admin: User = Depends(require_admin),
+    user: User = Depends(get_current_user),
     dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
 ):
     sql = """

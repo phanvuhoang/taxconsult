@@ -277,6 +277,17 @@ export default function TaxDocs() {
     setViewerLoading(false)
   }
 
+  async function loadImportedContent(doc) {
+    setViewerLoading(true)
+    setViewer(null)
+    try {
+      const data = await api.getTaxDocContent(doc.id)
+      setViewer({ so_hieu: doc.so_hieu, ten: doc.ten, noi_dung_html: data.noi_dung_html, link_tvpl: doc.link_tvpl })
+    } catch {
+      setViewer({ so_hieu: doc.so_hieu, ten: doc.ten, noi_dung_html: null, link_tvpl: doc.link_tvpl })
+    }
+    setViewerLoading(false)
+  }
   async function browseDbvntax() {
     if (!browseSacThue) return
     setBrowseLoading(true)
@@ -512,7 +523,13 @@ export default function TaxDocs() {
                 <div className="p-6 text-center text-gray-400 text-sm">Chưa có văn bản nào</div>
               ) : importedDocs.map(d => (
                 <div key={d.id} className="px-3 py-2 hover:bg-gray-50 flex items-center justify-between gap-2">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => {
+                    if (d.dbvntax_id) {
+                      loadBrowseContent({ id: d.dbvntax_id, so_hieu: d.so_hieu, ten: d.ten, link_tvpl: d.link_tvpl })
+                    } else {
+                      loadImportedContent(d)
+                    }
+                  }}>
                     <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
                       {loaiBadge(d.loai)}
                       <span className={`text-xs px-1.5 py-0.5 rounded-full ${d.tinh_trang === 'con_hieu_luc' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>

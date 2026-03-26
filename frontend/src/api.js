@@ -96,6 +96,7 @@ export const api = {
     return request('GET', `/tax-docs/dbvntax-browse?${params}`)
   },
   getDbvntaxContent: (id) => request('GET', `/tax-docs/dbvntax-content/${id}`),
+  getTaxDocContent: (id) => request('GET', `/tax-docs/content/${id}`),
 }
 
 export function streamFullReport(jobId, onEvent, onError, onDone) {

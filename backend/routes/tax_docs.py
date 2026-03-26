@@ -47,6 +47,8 @@ async def list_tax_docs(
             "tax_types": d.tax_types,
             "source": d.source,
             "dbvntax_id": d.dbvntax_id,
+            "has_content": bool(d.content_html or d.content_text),
+            "link_tvpl": d.link_tvpl,
         }
         for d in docs
     ]
@@ -152,6 +154,25 @@ async def import_from_dbvntax(
     return {"id": doc.id, "so_hieu": doc.so_hieu, "ten": doc.ten}
 
 
+@router.get("/content/{doc_id}")
+async def get_tax_doc_content(
+    doc_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(TaxDoc).where(TaxDoc.id == doc_id))
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    return {
+        "id": doc.id,
+        "so_hieu": doc.so_hieu,
+        "ten": doc.ten,
+        "noi_dung_html": doc.content_html,
+        "link_tvpl": doc.link_tvpl,
+    }
+
+
 @router.delete("/{doc_id}")
 async def delete_tax_doc(
     doc_id: int,
@@ -195,8 +216,10 @@ async def browse_dbvntax(
     dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
 ):
     from sqlalchemy import text
-    params = {"sac_thue": [sac_thue]}
-    where = "sac_thue && ARRAY[:sac_thue]::varchar[]"
+    # Build SQL with literal array to avoid asyncpg binding issues
+    sac_thue_literal = sac_thue.replace("'", "''")
+    where = f"sac_thue && ARRAY['{sac_thue_literal}']::varchar[]"
+    params = {}
     if loai:
         where += " AND loai = :loai"
         params["loai"] = loai
