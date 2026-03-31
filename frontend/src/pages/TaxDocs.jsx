@@ -2,6 +2,13 @@ import { useEffect, useState, useRef } from 'react'
 import { api } from '../api.js'
 
 const LOAI_OPTIONS = ['Tất cả', 'Luat', 'ND', 'TT', 'VBHN']
+const IMPORTANCE_LABEL = {
+  1: '⭐⭐ Rất quan trọng',
+  2: '⭐ Quan trọng',
+  3: 'Tham khảo',
+  4: 'Công văn',
+  5: '·',
+}
 
 // ─── Modal: Add to Priority (with AI-suggest) ──────────────────────────────
 function AddPriorityModal({ doc, onClose, onAdded }) {
@@ -133,13 +140,6 @@ function AddPriorityModal({ doc, onClose, onAdded }) {
               className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand resize-none" />
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-600 mb-1">Sort order</label>
-            <input type="number" value={form.sort_order}
-              onChange={e => setForm(p => ({ ...p, sort_order: e.target.value }))}
-              className="w-24 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand" />
-          </div>
-
           {err && <div className="text-red-600 text-xs">{err}</div>}
 
           <div className="flex gap-2 pt-1">
@@ -241,7 +241,7 @@ function EditPriorityForm({ doc, onSave, onCancel }) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function TaxDocs() {
-  const [tab, setTab] = useState('priority')
+  const [tab, setTab] = useState('priority')  // 'priority' | 'anchor'
   const [viewer, setViewer] = useState(null)
   const [viewerLoading, setViewerLoading] = useState(false)
   const [fontSize, setFontSize] = useState(14)
@@ -264,33 +264,30 @@ export default function TaxDocs() {
   const [priorityDocs, setPriorityDocs] = useState([])
   const [priorityFilter, setPriorityFilter] = useState('')
   const [editingId, setEditingId] = useState(null)
-
-  // --- Browse ---
   const [sacThueList, setSacThueList] = useState([])
-  const [browseSacThue, setBrowseSacThue] = useState('')
-  const [browseLoai, setBrowseLoai] = useState('')
-  const [browseResults, setBrowseResults] = useState([])
-  const [browseLoading, setBrowseLoading] = useState(false)
-  const [addModalDoc, setAddModalDoc] = useState(null)
 
-  // --- Imported ---
-  const [importedDocs, setImportedDocs] = useState([])
-  const [importSearch, setImportSearch] = useState('')
-  const [importSearchQuery, setImportSearchQuery] = useState('')
-  const [importLoading, setImportLoading] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  // --- Anchor docs (dbvntax) ---
+  const [anchorSacThue, setAnchorSacThue] = useState('')
+  const [anchorLoai, setAnchorLoai] = useState('')
+  const [anchorSearch, setAnchorSearch] = useState('')
+  const [anchorDocs, setAnchorDocs] = useState([])
+  const [anchorTotal, setAnchorTotal] = useState(0)
+  const [anchorPage, setAnchorPage] = useState(1)
+  const [anchorLoading, setAnchorLoading] = useState(false)
+  const [addModalDoc, setAddModalDoc] = useState(null)
   const [msg, setMsg] = useState('')
-  const fileRef = useRef()
 
   useEffect(() => {
     loadPriorityDocs()
     api.getDbvntaxSacThue().then(list => {
       setSacThueList(list)
-      if (list.length > 0) setBrowseSacThue(list[0].sac_thue)
+      if (list.length > 0) setAnchorSacThue(list[0].sac_thue)
     }).catch(() => {})
   }, [])
 
-  useEffect(() => { loadImported() }, [importSearch])
+  useEffect(() => {
+    if (tab === 'anchor' && anchorSacThue) loadAnchorDocs()
+  }, [tab, anchorSacThue, anchorLoai, anchorPage])
 
   async function loadPriorityDocs() {
     try {
@@ -299,10 +296,18 @@ export default function TaxDocs() {
     } catch {}
   }
 
-  async function loadImported() {
-    setImportLoading(true)
-    try { setImportedDocs(await api.listTaxDocs(importSearch)) } catch {}
-    setImportLoading(false)
+  async function loadAnchorDocs() {
+    setAnchorLoading(true)
+    try {
+      const params = { page: anchorPage, limit: 50 }
+      if (anchorSacThue) params.sac_thue = anchorSacThue
+      if (anchorLoai) params.loai = anchorLoai
+      if (anchorSearch) params.search = anchorSearch
+      const res = await api.getDbvntaxDocs(params)
+      setAnchorDocs(res.docs || [])
+      setAnchorTotal(res.total || 0)
+    } catch {}
+    setAnchorLoading(false)
   }
 
   async function loadPriorityContent(doc) {
@@ -314,7 +319,7 @@ export default function TaxDocs() {
     setViewerLoading(false)
   }
 
-  async function loadBrowseContent(doc) {
+  async function loadAnchorContent(doc) {
     setViewerLoading(true); setViewer(null)
     try {
       const d = await api.getDbvntaxContent(doc.id)
@@ -323,39 +328,16 @@ export default function TaxDocs() {
     setViewerLoading(false)
   }
 
-  async function loadImportedContent(doc) {
-    setViewerLoading(true); setViewer(null)
-    try {
-      const d = await api.getTaxDocContent(doc.id)
-      setViewer({ so_hieu: doc.so_hieu, ten: doc.ten, noi_dung_html: d.noi_dung_html, link_tvpl: doc.link_tvpl })
-    } catch {}
-    setViewerLoading(false)
-  }
-
-  async function browseLoad() {
-    if (!browseSacThue) return
-    setBrowseLoading(true)
-    try { setBrowseResults(await api.browseDbvntax(browseSacThue, browseLoai || undefined)) } catch {}
-    setBrowseLoading(false)
-  }
-  useEffect(() => { if (browseSacThue) browseLoad() }, [browseSacThue, browseLoai])
-
   async function deletePriority(id) {
     if (!confirm('Xoá khỏi danh sách ưu tiên?')) return
     try { await api.deletePriorityDoc(id); setPriorityDocs(p => p.filter(d => d.id !== id)) } catch {}
   }
 
-  async function handleUpload(e) {
-    const file = e.target.files[0]; if (!file) return
-    setUploading(true); setMsg('')
-    try { const r = await api.uploadTaxDoc(file); setMsg(`✅ Đã upload: ${r.ten}`); loadImported() }
-    catch (err) { setMsg(`❌ ${err.message}`) }
-    finally { setUploading(false); if (fileRef.current) fileRef.current.value = '' }
-  }
-
-  async function deleteImported(id) {
-    if (!confirm('Xoá văn bản này?')) return
-    try { await api.deleteTaxDoc(id); setImportedDocs(p => p.filter(d => d.id !== id)) } catch {}
+  async function updatePriorityLevel(id, level) {
+    try {
+      const updated = await api.updatePriorityDoc(id, { priority_level: level })
+      setPriorityDocs(p => p.map(d => d.id === id ? { ...d, priority_level: updated.priority_level } : d))
+    } catch {}
   }
 
   function statusBadge(d) {
@@ -370,8 +352,8 @@ export default function TaxDocs() {
   }
 
   // Active list for collapsed view
-  const activeList = tab === 'priority' ? priorityDocs : tab === 'browse' ? browseResults : importedDocs
-  const activeLoadFn = (d) => tab === 'priority' ? loadPriorityContent(d) : tab === 'browse' ? loadBrowseContent(d) : loadImportedContent(d)
+  const activeList = tab === 'priority' ? priorityDocs : anchorDocs
+  const activeLoadFn = (d) => tab === 'priority' ? loadPriorityContent(d) : loadAnchorContent(d)
 
   return (
     <div className="flex h-full overflow-hidden select-none">
@@ -402,9 +384,8 @@ export default function TaxDocs() {
             {/* Tabs */}
             <div className="flex items-center border-b border-gray-200 px-2 pt-2 gap-0.5">
               {[
-                { id: 'priority', label: '⭐ Ưu tiên' },
-                { id: 'browse', label: '🔎 Browse' },
-                { id: 'imported', label: '📁 Import' },
+                { id: 'priority', label: '📌 Ưu tiên' },
+                { id: 'anchor',   label: '📚 VB Quan trọng' },
               ].map(t => (
                 <button key={t.id} onClick={() => setTab(t.id)}
                   className={`px-2 py-1.5 rounded-t-lg text-xs font-medium transition-colors flex-1 ${
@@ -427,65 +408,119 @@ export default function TaxDocs() {
                   </select>
                   <button onClick={loadPriorityDocs} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">↻</button>
                 </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
+                <div className="flex-1 overflow-y-auto">
                   {priorityDocs.length === 0
                     ? <div className="p-6 text-center text-gray-400 text-sm">Chưa có văn bản ưu tiên</div>
-                    : priorityDocs.map(d => (
-                      <div key={d.id} className="p-2.5">
-                        <div className="flex items-start justify-between gap-1">
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadPriorityContent(d)}>
-                            <div className="flex items-center gap-1 flex-wrap mb-0.5">
-                              {loaiBadge(d.loai)}{statusBadge(d)}
+                    : [1, 2, 3, 4, 5].map(level => {
+                        const docsAtLevel = priorityDocs.filter(d => (d.priority_level || 3) === level)
+                        if (!docsAtLevel.length) return null
+                        const stars = '⭐'.repeat(Math.max(0, 3 - level + 1))
+                        return (
+                          <div key={level} className="mb-1">
+                            <div className="px-2.5 pt-2 pb-1 text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">
+                              {stars || '·'} Mức {level} ({docsAtLevel.length})
                             </div>
-                            <div className="text-xs font-mono text-gray-700 truncate">{d.so_hieu}</div>
-                            <div className="text-xs text-gray-800 line-clamp-2 leading-snug">{d.ten}</div>
-                            {d.thay_the_boi && <div className="text-xs text-orange-600 mt-0.5 truncate">↳ {d.thay_the_boi}</div>}
-                            {d.ghi_chu_hieu_luc && <div className="text-xs text-gray-400 mt-0.5 truncate">{d.ghi_chu_hieu_luc}</div>}
+                            {docsAtLevel.map(d => (
+                              <div key={d.id} className="p-2.5 border-b border-gray-50">
+                                <div className="flex items-start justify-between gap-1">
+                                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadPriorityContent(d)}>
+                                    <div className="flex items-center gap-1 flex-wrap mb-0.5">
+                                      {loaiBadge(d.loai)}{statusBadge(d)}
+                                    </div>
+                                    <div className="text-xs font-mono text-gray-700 truncate">{d.so_hieu}</div>
+                                    <div className="text-xs text-gray-800 line-clamp-2 leading-snug">{d.ten}</div>
+                                    {d.thay_the_boi && <div className="text-xs text-orange-600 mt-0.5 truncate">↳ {d.thay_the_boi}</div>}
+                                    {d.ghi_chu_hieu_luc && <div className="text-xs text-gray-400 mt-0.5 truncate">{d.ghi_chu_hieu_luc}</div>}
+                                  </div>
+                                  <div className="flex flex-col gap-1 shrink-0 items-end">
+                                    <select
+                                      value={d.priority_level || 3}
+                                      onChange={e => updatePriorityLevel(d.id, Number(e.target.value))}
+                                      onClick={e => e.stopPropagation()}
+                                      className="text-xs border border-gray-200 rounded px-1 py-0.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-brand"
+                                      title="Mức ưu tiên (1=cao nhất)"
+                                    >
+                                      {[1, 2, 3, 4, 5].map(n => (
+                                        <option key={n} value={n}>
+                                          {'⭐'.repeat(Math.max(0, 3 - n + 1)) || '·'} Mức {n}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => setEditingId(editingId === d.id ? null : d.id)} className="text-xs text-gray-400 hover:text-brand">✏️</button>
+                                      <button onClick={() => deletePriority(d.id)} className="text-xs text-gray-400 hover:text-red-600">🗑️</button>
+                                    </div>
+                                  </div>
+                                </div>
+                                {editingId === d.id && (
+                                  <EditPriorityForm doc={d}
+                                    onSave={updated => { setPriorityDocs(p => p.map(x => x.id === d.id ? updated : x)); setEditingId(null) }}
+                                    onCancel={() => setEditingId(null)} />
+                                )}
+                              </div>
+                            ))}
                           </div>
-                          <div className="flex gap-1 shrink-0">
-                            <button onClick={() => setEditingId(editingId === d.id ? null : d.id)} className="text-xs text-gray-400 hover:text-brand">✏️</button>
-                            <button onClick={() => deletePriority(d.id)} className="text-xs text-gray-400 hover:text-red-600">🗑️</button>
-                          </div>
-                        </div>
-                        {editingId === d.id && (
-                          <EditPriorityForm doc={d}
-                            onSave={updated => { setPriorityDocs(p => p.map(x => x.id === d.id ? updated : x)); setEditingId(null) }}
-                            onCancel={() => setEditingId(null)} />
-                        )}
-                      </div>
-                    ))
+                        )
+                      })
                   }
                 </div>
               </div>
             )}
 
-            {/* ── Browse tab ── */}
-            {tab === 'browse' && (
+            {/* ── Anchor tab (VB Quan trọng từ dbvntax) ── */}
+            {tab === 'anchor' && (
               <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="p-2 border-b border-gray-100 flex gap-1">
-                  <select value={browseSacThue} onChange={e => setBrowseSacThue(e.target.value)}
-                    className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand">
-                    {sacThueList.map(s => <option key={s.sac_thue} value={s.sac_thue}>{s.sac_thue} ({s.count})</option>)}
-                  </select>
-                  <select value={browseLoai} onChange={e => setBrowseLoai(e.target.value)}
-                    className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand">
-                    {LOAI_OPTIONS.map(l => <option key={l} value={l === 'Tất cả' ? '' : l}>{l}</option>)}
-                  </select>
+                <div className="p-2 border-b border-gray-100 space-y-1">
+                  <div className="flex gap-1">
+                    <select value={anchorSacThue} onChange={e => { setAnchorSacThue(e.target.value); setAnchorPage(1) }}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand">
+                      <option value="">Tất cả sắc thuế</option>
+                      {sacThueList.map(s => <option key={s.sac_thue} value={s.sac_thue}>{s.sac_thue} ({s.count})</option>)}
+                    </select>
+                    <select value={anchorLoai} onChange={e => { setAnchorLoai(e.target.value); setAnchorPage(1) }}
+                      className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand">
+                      {LOAI_OPTIONS.map(l => <option key={l} value={l === 'Tất cả' ? '' : l}>{l}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-1">
+                    <input type="text" value={anchorSearch}
+                      onChange={e => setAnchorSearch(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && loadAnchorDocs()}
+                      placeholder="Tìm số hiệu / tên..."
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand" />
+                    <button onClick={loadAnchorDocs} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Tìm</button>
+                  </div>
                 </div>
+                {anchorTotal > 0 && (
+                  <div className="px-2 py-1 text-xs text-gray-400 border-b border-gray-100">
+                    {anchorTotal} văn bản · trang {anchorPage}
+                    {anchorTotal > 50 && (
+                      <span className="ml-2">
+                        <button disabled={anchorPage <= 1} onClick={() => setAnchorPage(p => p - 1)}
+                          className="text-brand disabled:opacity-30">‹</button>
+                        <button disabled={anchorPage * 50 >= anchorTotal} onClick={() => setAnchorPage(p => p + 1)}
+                          className="ml-1 text-brand disabled:opacity-30">›</button>
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
-                  {browseLoading
+                  {anchorLoading
                     ? <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
-                    : browseResults.length === 0
+                    : anchorDocs.length === 0
                       ? <div className="p-6 text-center text-gray-400 text-sm">Không có văn bản</div>
-                      : browseResults.map(d => (
+                      : anchorDocs.map(d => (
                         <div key={d.id} className="p-2.5 hover:bg-gray-50">
                           <div className="flex items-start justify-between gap-1">
-                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadBrowseContent(d)}>
+                            <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadAnchorContent(d)}>
                               <div className="flex items-center gap-1 flex-wrap mb-0.5">
                                 {loaiBadge(d.loai)}
                                 <span className={`text-xs px-1 py-0.5 rounded-full ${d.tinh_trang === 'con_hieu_luc' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                   {d.tinh_trang === 'con_hieu_luc' ? 'Còn HL' : 'Hết HL'}
                                 </span>
+                                {d.importance && (
+                                  <span className="text-xs text-gray-400">{IMPORTANCE_LABEL[d.importance] || ''}</span>
+                                )}
                                 <span className="text-xs text-gray-400">{d.ngay_ban_hanh}</span>
                               </div>
                               <div className="text-xs font-mono text-gray-700 truncate">{d.so_hieu}</div>
@@ -493,54 +528,9 @@ export default function TaxDocs() {
                             </div>
                             <button onClick={() => setAddModalDoc(d)}
                               className="shrink-0 text-xs bg-brand text-white px-1.5 py-0.5 rounded hover:bg-brand-dark">
-                              + Ưu tiên
+                              📌
                             </button>
                           </div>
-                        </div>
-                      ))
-                  }
-                </div>
-              </div>
-            )}
-
-            {/* ── Imported tab ── */}
-            {tab === 'imported' && (
-              <div className="flex-1 flex flex-col overflow-hidden">
-                <div className="p-2 border-b border-gray-100 space-y-1.5">
-                  <label className="flex items-center gap-1.5 border border-dashed border-gray-300 rounded px-2 py-1.5 cursor-pointer hover:border-brand text-xs text-gray-500 hover:text-brand transition-colors">
-                    <span>📄</span>
-                    <span>{uploading ? 'Đang upload...' : 'Upload .docx / .pdf / .txt'}</span>
-                    <input ref={fileRef} type="file" accept=".docx,.pdf,.txt" onChange={handleUpload} className="hidden" />
-                  </label>
-                  <div className="flex gap-1">
-                    <input type="text" value={importSearchQuery}
-                      onChange={e => setImportSearchQuery(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && setImportSearch(importSearchQuery)}
-                      placeholder="Tìm số hiệu / tên..."
-                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand" />
-                    <button onClick={() => setImportSearch(importSearchQuery)} className="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">Tìm</button>
-                  </div>
-                  <ImportFromDbvntaxRow onImported={loadImported} />
-                </div>
-                {msg && (
-                  <div className={`mx-2 mt-1 px-2 py-1 rounded text-xs ${msg.startsWith('✅') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>{msg}</div>
-                )}
-                <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
-                  {importLoading
-                    ? <div className="p-6 text-center text-gray-400 text-sm">Đang tải...</div>
-                    : importedDocs.length === 0
-                      ? <div className="p-6 text-center text-gray-400 text-sm">Chưa có văn bản nào</div>
-                      : importedDocs.map(d => (
-                        <div key={d.id} className="px-2.5 py-2 hover:bg-gray-50 flex items-center justify-between gap-1">
-                          <div className="flex-1 min-w-0 cursor-pointer" onClick={() => loadImportedContent(d)}>
-                            <div className="flex items-center gap-1 flex-wrap mb-0.5">
-                              {loaiBadge(d.loai)}
-                              <span className="text-xs text-gray-400">{d.source}</span>
-                            </div>
-                            <div className="text-xs font-mono text-gray-600 truncate">{d.so_hieu || '—'}</div>
-                            <div className="text-xs text-gray-800 truncate">{d.ten}</div>
-                          </div>
-                          <button onClick={() => deleteImported(d.id)} className="text-red-400 hover:text-red-600 text-xs shrink-0">Xoá</button>
                         </div>
                       ))
                   }
@@ -612,59 +602,11 @@ export default function TaxDocs() {
           onAdded={() => { loadPriorityDocs(); setMsg('✅ Đã thêm vào danh sách ưu tiên') }}
         />
       )}
-    </div>
-  )
-}
 
-// ─── Mini: Import from dbvntax by search ───────────────────────────────────
-function ImportFromDbvntaxRow({ onImported }) {
-  const [q, setQ] = useState('')
-  const [results, setResults] = useState([])
-  const [searching, setSearching] = useState(false)
-  const [msg, setMsg] = useState('')
-
-  async function search() {
-    if (!q.trim()) return
-    setSearching(true)
-    try { setResults(await api.searchDbvntax(q)) } catch {}
-    setSearching(false)
-  }
-
-  async function doImport(id) {
-    setMsg('')
-    try {
-      const r = await api.importFromDbvntax(id)
-      setMsg(`✅ ${r.so_hieu}`)
-      setResults([]); setQ('')
-      onImported()
-    } catch (err) { setMsg(`❌ ${err.message}`) }
-  }
-
-  return (
-    <div>
-      <div className="flex gap-1">
-        <input type="text" value={q} onChange={e => setQ(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="Import từ dbvntax..."
-          className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand" />
-        <button onClick={search} disabled={searching}
-          className="text-xs px-2 py-1 bg-brand text-white rounded hover:bg-brand-dark disabled:opacity-60">
-          {searching ? '...' : 'Tìm'}
-        </button>
-      </div>
-      {msg && <div className="text-xs mt-1 text-green-600">{msg}</div>}
-      {results.length > 0 && (
-        <div className="mt-1 max-h-32 overflow-y-auto border border-gray-100 rounded divide-y text-xs">
-          {results.map(r => (
-            <div key={r.id} className="flex items-center justify-between px-2 py-1.5 hover:bg-gray-50">
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{r.so_hieu}</div>
-                <div className="text-gray-400 truncate">{r.ten}</div>
-              </div>
-              <button onClick={() => doImport(r.id)}
-                className="ml-1 bg-brand text-white px-2 py-0.5 rounded hover:bg-brand-dark shrink-0">Import</button>
-            </div>
-          ))}
+      {msg && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50"
+          onClick={() => setMsg('')}>
+          {msg}
         </div>
       )}
     </div>

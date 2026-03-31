@@ -150,8 +150,27 @@ async def get_priority_docs_context(
     if not filtered:
         return ""
 
-    parts = ["## VĂN BẢN ƯU TIÊN (admin đã chọn — ưu tiên cao nhất)\n"]
+    # Sort by priority_level ASC (1=cao nhất trước)
+    filtered.sort(key=lambda x: (x.priority_level or 3, x.sort_order or 0, x.id))
+
+    # Max chars per level
+    MAX_CHARS_PER_LEVEL = {1: 3000, 2: 2000, 3: 1500, 4: 800, 5: 0}
+    LEVEL_LABEL = {
+        1: "⭐⭐⭐ ƯU TIÊN CAO NHẤT",
+        2: "⭐⭐ ƯU TIÊN CAO",
+        3: "⭐ THAM KHẢO",
+        4: "THẤP",
+        5: "BỎ QUA",
+    }
+
+    parts = ["## VĂN BẢN ƯU TIÊN (admin đã chọn — MỨC 1 = cao nhất)\n"]
     for pd in filtered:
+        level = pd.priority_level if pd.priority_level is not None else 3
+        max_chars = MAX_CHARS_PER_LEVEL.get(level, 1500)
+        if max_chars == 0:
+            continue
+        level_label = LEVEL_LABEL.get(level, "THAM KHẢO")
+
         # Fetch noi_dung from dbvntax
         try:
             row = await dbvntax_db.execute(
@@ -164,7 +183,7 @@ async def get_priority_docs_context(
             noi_dung_html = ""
 
         lines = [
-            f"=== [ƯU TIÊN] VĂN BẢN: {pd.so_hieu or 'N/A'} ===",
+            f"=== [{level_label}] VĂN BẢN: {pd.so_hieu or 'N/A'} ===",
             f"Tên: {pd.ten}",
             f"Loại: {pd.loai or ''} | Cơ quan: {pd.co_quan or ''}",
             f"Hiệu lực: {pd.hieu_luc_tu or ''} → {pd.hieu_luc_den or 'nay'}",
@@ -178,8 +197,9 @@ async def get_priority_docs_context(
             lines.append(f"LINK: {pd.link_tvpl}")
         if noi_dung_html:
             content = strip_html_tvpl(noi_dung_html)
-            if len(content) > MAX_DOC_CHARS:
-                content = content[:MAX_DOC_CHARS] + "\n...[nội dung tiếp theo, đã cắt bớt]"
+            content = content[:max_chars]
+            if len(strip_html_tvpl(noi_dung_html)) > max_chars:
+                content += "\n...[nội dung tiếp theo, đã cắt bớt]"
             lines.append(f"\nNỘI DUNG:\n{content}")
         lines.append("=" * 50)
         parts.append("\n".join(lines))

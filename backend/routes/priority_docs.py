@@ -38,6 +38,7 @@ def _serialize(d: PriorityDoc) -> dict:
         "pham_vi_het_hieu_luc": d.pham_vi_het_hieu_luc,
         "ghi_chu_hieu_luc": d.ghi_chu_hieu_luc,
         "link_tvpl": d.link_tvpl,
+        "priority_level": d.priority_level if d.priority_level is not None else 3,
         "sort_order": d.sort_order,
         "created_at": d.created_at.isoformat() if d.created_at else None,
     }
@@ -49,7 +50,7 @@ async def list_priority_docs(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(PriorityDoc).order_by(PriorityDoc.sort_order, PriorityDoc.id)
+    q = select(PriorityDoc).order_by(PriorityDoc.priority_level, PriorityDoc.sort_order, PriorityDoc.id)
     if sac_thue:
         q = q.where(PriorityDoc.sac_thue.any(sac_thue))
     result = await db.execute(q)
@@ -123,6 +124,7 @@ class UpdatePriorityDocRequest(BaseModel):
     pham_vi_het_hieu_luc: Optional[str] = None
     ghi_chu_hieu_luc: Optional[str] = None
     sort_order: Optional[int] = None
+    priority_level: Optional[int] = None
 
 
 @router.patch("/{doc_id}")
@@ -149,6 +151,8 @@ async def update_priority_doc(
         pd.ghi_chu_hieu_luc = body.ghi_chu_hieu_luc or None
     if body.sort_order is not None:
         pd.sort_order = body.sort_order
+    if body.priority_level is not None:
+        pd.priority_level = max(1, min(5, body.priority_level))
 
     await db.commit()
     await db.refresh(pd)

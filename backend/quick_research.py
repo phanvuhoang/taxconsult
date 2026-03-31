@@ -19,8 +19,11 @@ QUICK_PROMPT = """CÂU HỎI: {question}
 GIAI ĐOẠN ÁP DỤNG: {time_period_label}
 (Chỉ trích dẫn quy định có hiệu lực trong giai đoạn này)
 
-=== VĂN BẢN ƯU TIÊN (admin đã chọn) ===
+=== VĂN BẢN ƯU TIÊN (admin đã xếp hạng — MỨC 1 = cao nhất) ===
 {priority_ctx}
+
+⚠️ QUAN TRỌNG: Ưu tiên dẫn chiếu văn bản MỨC 1 trước, rồi mới đến MỨC 2, MỨC 3.
+Chỉ dùng văn bản thấp hơn khi văn bản cao hơn không đủ.
 
 === VĂN BẢN TỪ DATABASE ===
 {doc_context}

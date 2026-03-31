@@ -128,6 +128,8 @@ export const api = {
   getPriorityDocContent: (dbvntax_id) => request('GET', `/priority-docs/content/${dbvntax_id}`),
   suggestPriorityMeta: (dbvntax_id) => request('GET', `/priority-docs/suggest/${dbvntax_id}`),
   suggestTopics: (data) => request('POST', '/reports/suggest-topics', data),
+  getDefaultSections: (mode = 'ngành') =>
+    request('GET', `/reports/default-sections?mode=${encodeURIComponent(mode)}`),
   suggestSubsections: (data) => request('POST', '/reports/suggest-subsections', data),
   createGamma: (data) => request('POST', '/reports/gamma', data),
 
@@ -139,6 +141,8 @@ export const api = {
   },
   getDbvntaxContent: (id) => request('GET', `/tax-docs/dbvntax-content/${id}`),
   getTaxDocContent: (id) => request('GET', `/tax-docs/content/${id}`),
+  getDbvntaxDocs: (params) =>
+    request('GET', `/tax-docs/dbvntax?${new URLSearchParams(params)}`),
 }
 
 export function downloadBlob({ blob, filename }) {

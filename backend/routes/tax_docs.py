@@ -188,6 +188,52 @@ async def delete_tax_doc(
     return {"ok": True}
 
 
+@router.get("/dbvntax")
+async def list_dbvntax_docs(
+    sac_thue: Optional[str] = Query(None),
+    loai: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, le=200),
+    user: User = Depends(get_current_user),
+    dbvntax_db: AsyncSession = Depends(get_dbvntax_db),
+):
+    """List văn bản từ dbvntax — grouped by sắc thuế."""
+    from sqlalchemy import text as sql_text
+    filters = ["1=1"]
+    params = {}
+    if sac_thue:
+        filters.append(":sac_thue = ANY(sac_thue)")
+        params["sac_thue"] = sac_thue
+    if loai:
+        filters.append("doc_type = :loai")
+        params["loai"] = loai
+    if search:
+        filters.append("(ten ILIKE :search OR so_hieu ILIKE :search)")
+        params["search"] = f"%{search}%"
+    where = " AND ".join(filters)
+    params["offset"] = (page - 1) * limit
+    params["limit"] = limit
+
+    rows = await dbvntax_db.execute(sql_text(f"""
+        SELECT id, so_hieu, ten, doc_type as loai, sac_thue,
+               ngay_ban_hanh::text, importance, tinh_trang
+        FROM documents
+        WHERE {where}
+        ORDER BY importance ASC NULLS LAST, ngay_ban_hanh DESC NULLS LAST
+        OFFSET :offset LIMIT :limit
+    """), params)
+    docs = [dict(r) for r in rows.mappings()]
+
+    count_params = {k: v for k, v in params.items() if k not in ("offset", "limit")}
+    cnt = await dbvntax_db.execute(sql_text(f"""
+        SELECT COUNT(*) FROM documents WHERE {where}
+    """), count_params)
+    total = cnt.scalar()
+
+    return {"docs": docs, "total": total, "page": page}
+
+
 @router.get("/search-dbvntax")
 async def search_dbvntax(
     q: str = Query(..., min_length=2),

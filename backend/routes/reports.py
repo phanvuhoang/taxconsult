@@ -16,7 +16,7 @@ from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
 from backend.models import Report, ReportJob, User
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
-from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS
+from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -301,6 +301,14 @@ async def suggest_subsections(
     match = re.search(r'\[.*?\]', result["content"], re.DOTALL)
     suggestions = json.loads(match.group()) if match else []
     return {"suggestions": suggestions}
+
+
+@router.get("/default-sections")
+async def get_default_sections(
+    mode: str = Query("ngành"),
+    user: User = Depends(get_current_user),
+):
+    return COMPANY_SECTIONS if mode == "công ty" else SECTOR_SECTIONS
 
 
 @router.post("/suggest-topics")

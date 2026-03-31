@@ -93,6 +93,9 @@ class PriorityDoc(Base):
     # Link
     link_tvpl = Column(Text)
 
+    # Priority level (1=cao nhất, 5=thấp nhất)
+    priority_level = Column(Integer, default=3)
+
     # Anchor period
     anchor_from = Column(Date, nullable=True)   # Anchor có hiệu lực từ ngày
     anchor_to   = Column(Date, nullable=True)   # Anchor hết hiệu lực (NULL = đang dùng)

@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { api, downloadBlob } from '../api.js'
 import PeriodSelector from '../components/PeriodSelector.jsx'
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core'
+import {
+  SortableContext, verticalListSortingStrategy, useSortable, arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD']
 const MODELS = [
@@ -20,10 +27,11 @@ const DEFAULT_SECTIONS = [
 const POLL_INTERVAL = 3000
 
 // ── SectionCard ──────────────────────────────────────────────────────────────
-function SectionCard({ section, subject, onToggle, onUpdateTitle, onAddSub, onRemoveSub, onRemove, onSuggestSubs }) {
+function SectionCard({ section, subject, dragHandle, onToggle, onUpdateTitle, onAddSub, onRemoveSub, onRemove, onSuggestSubs, onToggleTaxAware }) {
   return (
     <div className={`border rounded-lg p-3 transition-opacity ${!section.enabled ? 'opacity-50' : 'bg-white'}`}>
       <div className="flex items-center gap-2 mb-1">
+        {dragHandle}
         <input
           type="checkbox"
           checked={section.enabled}
@@ -36,9 +44,18 @@ function SectionCard({ section, subject, onToggle, onUpdateTitle, onAddSub, onRe
           onBlur={(e) => onUpdateTitle(section.id, e.target.value)}
           className="flex-1 text-sm font-medium border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-brand/30 rounded px-1"
         />
-        {section.tax_aware && (
-          <span className="text-xs bg-green-100 text-green-700 rounded px-1 py-0.5 shrink-0">📚 anchor</span>
-        )}
+        <button
+          type="button"
+          onClick={() => onToggleTaxAware(section.id)}
+          title={section.tax_aware ? 'Đang dùng anchor docs — click để tắt' : 'Click để bật anchor docs'}
+          className={`text-xs px-1.5 py-0.5 rounded border transition shrink-0 ${
+            section.tax_aware
+              ? 'bg-green-100 border-green-200 text-green-700'
+              : 'bg-gray-100 border-gray-200 text-gray-400'
+          }`}
+        >
+          📚 {section.tax_aware ? 'anchor on' : 'anchor off'}
+        </button>
         <button
           type="button"
           onClick={() => onSuggestSubs(section.id)}
@@ -58,7 +75,7 @@ function SectionCard({ section, subject, onToggle, onUpdateTitle, onAddSub, onRe
       {/* Sub-topics */}
       <div className="flex flex-wrap gap-1 ml-6">
         {(section.sub || []).map((sub, j) => (
-          <span key={j} className="inline-flex items-center gap-1 bg-green-50 border border-green-100 rounded-full px-2 py-0.5 text-xs">
+          <span key={j} className="sub-chip inline-flex items-center gap-1 bg-green-50 border border-green-100 rounded-full px-2 py-0.5 text-xs">
             {sub}
             <button
               type="button"
@@ -84,6 +101,35 @@ function SectionCard({ section, subject, onToggle, onUpdateTitle, onAddSub, onRe
   )
 }
 
+// ── SortableSectionCard ───────────────────────────────────────────────────────
+function SortableSectionCard({ section, ...props }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: section.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  }
+  return (
+    <div ref={setNodeRef} style={style}>
+      <SectionCard
+        section={section}
+        dragHandle={
+          <span
+            {...attributes}
+            {...listeners}
+            className="cursor-grab text-gray-300 hover:text-gray-500 px-1 touch-none select-none shrink-0"
+            title="Kéo để sắp xếp"
+          >
+            ⠿
+          </span>
+        }
+        {...props}
+      />
+    </div>
+  )
+}
+
 function buildTOC(html) {
   const matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)]
   return matches.map((m, i) => ({
@@ -105,9 +151,12 @@ export default function FullReport() {
   const [taxTypes, setTaxTypes] = useState(['TNDN', 'GTGT'])
   const [period, setPeriod] = useState('hiện_nay')
   const [model, setModel] = useState('deepseek')
-  const [sonar, setSonar] = useState('sonar')
+  const [sonar, setSonar] = useState('sonar-pro')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [suggesting, setSuggesting] = useState(false)
+
+  // dnd-kit sensors
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
 
   // Job/report state
   const [status, setStatus] = useState('idle') // idle|loading|polling|done|error
@@ -137,7 +186,7 @@ export default function FullReport() {
   const [refOpen, setRefOpen] = useState(false)
 
   // Gamma
-  const [createGamma, setCreateGamma] = useState(false)
+  const [createGamma, setCreateGamma] = useState(true)
   const [numSlides, setNumSlides] = useState(20)
   const [gammaUrl, setGammaUrl] = useState('')
   const [gammaLoading, setGammaLoading] = useState(false)
@@ -161,6 +210,36 @@ export default function FullReport() {
 
   function toggleTax(t) {
     setTaxTypes((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
+  }
+
+  async function handleModeChange(newMode) {
+    setMode(newMode)
+    try {
+      const data = await api.getDefaultSections(newMode)
+      if (data?.length) setSections(data)
+    } catch (e) { console.error(e) }
+  }
+
+  async function resetSections() {
+    try {
+      const data = await api.getDefaultSections(mode)
+      if (data?.length) setSections(data)
+    } catch (e) { console.error(e) }
+  }
+
+  function toggleTaxAware(id) {
+    setSections((prev) => prev.map((s) => s.id === id ? { ...s, tax_aware: !s.tax_aware } : s))
+  }
+
+  function handleDragEnd(event) {
+    const { active, over } = event
+    if (active.id !== over?.id) {
+      setSections((prev) => {
+        const oldIdx = prev.findIndex((s) => s.id === active.id)
+        const newIdx = prev.findIndex((s) => s.id === over.id)
+        return arrayMove(prev, oldIdx, newIdx)
+      })
+    }
   }
 
   function toggleSection(id, enabled) {
@@ -376,7 +455,7 @@ export default function FullReport() {
                 <label key={m} className="flex items-center gap-2 cursor-pointer text-sm">
                   <input
                     type="radio" name="mode" value={m}
-                    checked={mode === m} onChange={() => setMode(m)}
+                    checked={mode === m} onChange={() => handleModeChange(m)}
                     className="accent-brand"
                   />
                   {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -427,7 +506,7 @@ export default function FullReport() {
             </div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Perplexity</label>
             <div className="flex gap-3 text-sm">
-              {[{ v: 'sonar', l: 'Sonar ⭐' }, { v: 'sonar-pro', l: 'Sonar Pro' }].map((m) => (
+              {[{ v: 'sonar', l: 'Sonar' }, { v: 'sonar-pro', l: 'Sonar Pro ⭐' }].map((m) => (
                 <label key={m.v} className="flex items-center gap-1 cursor-pointer">
                   <input type="radio" name="sonar" value={m.v}
                     checked={sonar === m.v} onChange={() => setSonar(m.v)}
@@ -442,7 +521,7 @@ export default function FullReport() {
 
         {/* Sections */}
         <div className="mb-4">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <label className="text-xs font-medium text-gray-600">Các phần báo cáo</label>
             <button type="button" onClick={handleSuggestTopics}
               disabled={suggesting || !subject.trim()}
@@ -450,22 +529,32 @@ export default function FullReport() {
             >
               {suggesting ? '⏳ Đang gợi ý...' : '✨ AI gợi ý topics'}
             </button>
+            <button type="button" onClick={resetSections}
+              className="text-xs px-2 py-1 rounded border border-gray-300 hover:border-brand hover:text-brand text-gray-400 transition-colors"
+            >
+              ↺ Reset mặc định
+            </button>
           </div>
-          <div className="space-y-1">
-            {sections.map((s) => (
-              <SectionCard
-                key={s.id}
-                section={s}
-                subject={subject}
-                onToggle={toggleSection}
-                onUpdateTitle={updateTitle}
-                onAddSub={addSub}
-                onRemoveSub={removeSub}
-                onRemove={removeSection}
-                onSuggestSubs={suggestSubs}
-              />
-            ))}
-          </div>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={sections.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+              <div className="space-y-1">
+                {sections.map((s) => (
+                  <SortableSectionCard
+                    key={s.id}
+                    section={s}
+                    subject={subject}
+                    onToggle={toggleSection}
+                    onUpdateTitle={updateTitle}
+                    onAddSub={addSub}
+                    onRemoveSub={removeSub}
+                    onRemove={removeSection}
+                    onSuggestSubs={suggestSubs}
+                    onToggleTaxAware={toggleTaxAware}
+                  />
+                ))}
+              </div>
+            </SortableContext>
+          </DndContext>
           <button type="button" onClick={addSection}
             className="mt-2 text-xs px-3 py-1 rounded border border-dashed border-gray-300 hover:border-brand hover:text-brand text-gray-400 transition-colors"
           >

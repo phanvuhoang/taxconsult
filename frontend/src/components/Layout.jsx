@@ -2,6 +2,20 @@ import { useState, useEffect } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 
+function useTheme() {
+  const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark')
+  useEffect(() => {
+    if (dark) {
+      document.documentElement.classList.add('dark')
+      localStorage.setItem('theme', 'dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+      localStorage.setItem('theme', 'light')
+    }
+  }, [dark])
+  return [dark, setDark]
+}
+
 const NAV = [
   { to: '/', label: 'Dashboard', icon: '🏠', exact: true },
   { to: '/quick-research', label: 'Quick Research', icon: '🔍' },
@@ -15,6 +29,7 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [user, setUser] = useState(null)
   const navigate = useNavigate()
+  const [dark, setDark] = useTheme()
 
   useEffect(() => {
     api.me().then(setUser).catch(() => {})
@@ -102,6 +117,14 @@ export default function Layout() {
               )}
             </div>
           )}
+          <button
+            onClick={() => setDark(!dark)}
+            className="w-full flex items-center gap-2 text-gray-400 hover:text-white text-sm py-1 mb-1"
+            title="Đổi giao diện sáng/tối"
+          >
+            <span>{dark ? '☀️' : '🌙'}</span>
+            {!collapsed && (dark ? 'Sáng' : 'Tối')}
+          </button>
           <button
             onClick={logout}
             className="w-full flex items-center gap-2 text-gray-400 hover:text-white text-sm py-1"

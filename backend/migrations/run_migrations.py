@@ -7,7 +7,10 @@ from backend.config import DATABASE_URL, DBVNTAX_DATABASE_URL
 TAXCONSULT_SQL = """
 ALTER TABLE priority_docs
   ADD COLUMN IF NOT EXISTS anchor_from DATE,
-  ADD COLUMN IF NOT EXISTS anchor_to   DATE;
+  ADD COLUMN IF NOT EXISTS anchor_to   DATE,
+  ADD COLUMN IF NOT EXISTS priority_level INTEGER DEFAULT 3;
+
+COMMENT ON COLUMN priority_docs.priority_level IS '1=cao nhất, 5=thấp nhất';
 """
 
 DBVNTAX_SQL = """
