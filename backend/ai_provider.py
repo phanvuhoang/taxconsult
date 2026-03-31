@@ -1,164 +1,266 @@
-"""AI call abstraction — Anthropic primary, Claudible fallback, OpenAI last resort."""
+"""AI provider abstraction — Claudible (primary, free) + DeepSeek + Anthropic + OpenAI."""
 import httpx
+import json
 from typing import AsyncGenerator, Optional
 from backend.config import (
-    ANTHROPIC_API_KEY, CLAUDIBLE_BASE_URL, CLAUDIBLE_API_KEY,
-    OPENAI_API_KEY, MODEL_MAP
+    CLAUDIBLE_BASE_URL, CLAUDIBLE_API_KEY,
+    DEEPSEEK_API_KEY,
+    ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    MODEL_MAP, DEFAULT_MODEL_TIER,
 )
 
 
 def resolve_model(model_tier: str) -> str:
-    return MODEL_MAP.get(model_tier, MODEL_MAP["fast"])
+    return MODEL_MAP.get(model_tier, MODEL_MAP[DEFAULT_MODEL_TIER])
 
 
 async def call_ai(
     messages: list,
     system: str = "",
-    model_tier: str = "fast",
-    max_tokens: int = 4096,
+    model_tier: str = None,
+    max_tokens: int = 8000,
 ) -> dict:
-    """
-    Non-streaming AI call. Returns dict with keys:
-      content, model_used, provider_used, prompt_tokens, completion_tokens
-    """
-    model = resolve_model(model_tier)
+    """Non-streaming AI call. Returns dict: content, model_used, provider_used."""
+    tier = model_tier or DEFAULT_MODEL_TIER
+    model = resolve_model(tier)
 
-    # Try Anthropic first
-    if ANTHROPIC_API_KEY:
-        try:
-            return await _call_anthropic(messages, system, model, max_tokens)
-        except Exception:
-            pass
+    # Route: DeepSeek tiers
+    if tier == "deepseek" or "deepseek" in model:
+        result = await _call_deepseek(messages, system, model, max_tokens)
+        if result:
+            return result
 
-    # Fallback: Claudible
+    # Route: Claudible (Haiku / Sonnet)
     if CLAUDIBLE_API_KEY:
-        try:
-            return await _call_claudible(messages, system, model, max_tokens)
-        except Exception:
-            pass
+        result = await _call_claudible(messages, system, model, max_tokens)
+        if result:
+            return result
+
+    # Fallback: Anthropic direct
+    if ANTHROPIC_API_KEY:
+        result = await _call_anthropic(messages, system, model, max_tokens)
+        if result:
+            return result
 
     # Last resort: OpenAI
     if OPENAI_API_KEY:
-        return await _call_openai(messages, system, model, max_tokens)
+        return await _call_openai(messages, system, max_tokens)
 
-    raise RuntimeError("No AI provider configured")
+    raise RuntimeError("No AI provider configured or all providers failed")
 
 
 async def stream_ai(
     messages: list,
     system: str = "",
-    model_tier: str = "fast",
-    max_tokens: int = 8192,
+    model_tier: str = None,
+    max_tokens: int = 8000,
 ) -> AsyncGenerator[str, None]:
     """Streaming AI call, yields text chunks."""
-    model = resolve_model(model_tier)
+    tier = model_tier or DEFAULT_MODEL_TIER
+    model = resolve_model(tier)
 
-    if ANTHROPIC_API_KEY:
-        try:
-            async for chunk in _stream_anthropic(messages, system, model, max_tokens):
+    if tier == "deepseek" or "deepseek" in model:
+        if DEEPSEEK_API_KEY:
+            async for chunk in _stream_deepseek(messages, system, model, max_tokens):
                 yield chunk
             return
-        except Exception:
-            pass
 
     if CLAUDIBLE_API_KEY:
         async for chunk in _stream_claudible(messages, system, model, max_tokens):
             yield chunk
         return
 
+    if ANTHROPIC_API_KEY:
+        async for chunk in _stream_anthropic(messages, system, model, max_tokens):
+            yield chunk
+        return
+
     raise RuntimeError("No streaming AI provider configured")
 
 
-async def _call_anthropic(messages, system, model, max_tokens) -> dict:
-    import anthropic
-    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
+# ── Claudible (OpenAI-completions format) ─────────────────────────
+async def _call_claudible(messages, system, model, max_tokens) -> Optional[dict]:
+    if not CLAUDIBLE_API_KEY:
+        return None
+    oai_messages = []
     if system:
-        kwargs["system"] = system
-    resp = await client.messages.create(**kwargs)
-    return {
-        "content": resp.content[0].text,
-        "model_used": model,
-        "provider_used": "anthropic",
-        "prompt_tokens": resp.usage.input_tokens,
-        "completion_tokens": resp.usage.output_tokens,
-    }
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    timeout = 180 if "sonnet" in model or "opus" in model else 120
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.post(
+                f"{CLAUDIBLE_BASE_URL}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {CLAUDIBLE_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "max_tokens": max_tokens, "messages": oai_messages},
+            )
+            r.raise_for_status()
+            data = r.json()
+            return {
+                "content": data["choices"][0]["message"]["content"],
+                "model_used": model,
+                "provider_used": "claudible",
+                "prompt_tokens": data.get("usage", {}).get("prompt_tokens", 0),
+                "completion_tokens": data.get("usage", {}).get("completion_tokens", 0),
+            }
+    except Exception as e:
+        print(f"Claudible {model} error: {e}")
+        return None
 
 
-async def _call_claudible(messages, system, model, max_tokens) -> dict:
-    payload = {"model": model, "max_tokens": max_tokens, "messages": messages}
+async def _stream_claudible(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
+    if not CLAUDIBLE_API_KEY:
+        return
+    oai_messages = []
     if system:
-        payload["system"] = system
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            f"{CLAUDIBLE_BASE_URL}/messages",
-            headers={"x-api-key": CLAUDIBLE_API_KEY, "anthropic-version": "2023-06-01"},
-            json=payload,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    return {
-        "content": data["content"][0]["text"],
-        "model_used": model,
-        "provider_used": "claudible",
-        "prompt_tokens": data.get("usage", {}).get("input_tokens", 0),
-        "completion_tokens": data.get("usage", {}).get("output_tokens", 0),
-    }
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    try:
+        async with httpx.AsyncClient(timeout=600) as client:
+            async with client.stream(
+                "POST",
+                f"{CLAUDIBLE_BASE_URL}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {CLAUDIBLE_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "max_tokens": max_tokens,
+                      "messages": oai_messages, "stream": True},
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            pass
+    except Exception as e:
+        print(f"Claudible stream {model} error: {e}")
 
 
-async def _call_openai(messages, system, model, max_tokens) -> dict:
+# ── DeepSeek (OpenAI-compatible) ──────────────────────────────────
+async def _call_deepseek(messages, system, model, max_tokens) -> Optional[dict]:
+    if not DEEPSEEK_API_KEY:
+        return None
+    oai_messages = []
+    if system:
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "max_tokens": max_tokens, "messages": oai_messages},
+            )
+            r.raise_for_status()
+            data = r.json()
+            return {
+                "content": data["choices"][0]["message"]["content"],
+                "model_used": model,
+                "provider_used": "deepseek",
+                "prompt_tokens": data.get("usage", {}).get("prompt_tokens", 0),
+                "completion_tokens": data.get("usage", {}).get("completion_tokens", 0),
+            }
+    except Exception as e:
+        print(f"DeepSeek {model} error: {e}")
+        return None
+
+
+async def _stream_deepseek(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
+    if not DEEPSEEK_API_KEY:
+        return
+    oai_messages = []
+    if system:
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    try:
+        async with httpx.AsyncClient(timeout=600) as client:
+            async with client.stream(
+                "POST",
+                "https://api.deepseek.com/chat/completions",
+                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": model, "max_tokens": max_tokens,
+                      "messages": oai_messages, "stream": True},
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            pass
+    except Exception as e:
+        print(f"DeepSeek stream {model} error: {e}")
+
+
+# ── Anthropic direct (fallback, paid) ─────────────────────────────
+async def _call_anthropic(messages, system, model, max_tokens) -> Optional[dict]:
+    if not ANTHROPIC_API_KEY:
+        return None
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages}
+        if system:
+            kwargs["system"] = system
+        resp = await client.messages.create(**kwargs)
+        return {
+            "content": resp.content[0].text,
+            "model_used": model,
+            "provider_used": "anthropic",
+            "prompt_tokens": resp.usage.input_tokens,
+            "completion_tokens": resp.usage.output_tokens,
+        }
+    except Exception as e:
+        print(f"Anthropic direct {model} error: {e}")
+        return None
+
+
+async def _stream_anthropic(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
+    if not ANTHROPIC_API_KEY:
+        return
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+        kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages, "stream": True}
+        if system:
+            kwargs["system"] = system
+        async with client.messages.stream(**kwargs) as stream:
+            async for text in stream.text_stream:
+                yield text
+    except Exception as e:
+        print(f"Anthropic stream {model} error: {e}")
+
+
+# ── OpenAI (last resort) ──────────────────────────────────────────
+async def _call_openai(messages, system, max_tokens) -> dict:
     from openai import AsyncOpenAI
     client = AsyncOpenAI(api_key=OPENAI_API_KEY)
     oai_messages = []
     if system:
         oai_messages.append({"role": "system", "content": system})
     oai_messages.extend(messages)
-    # Map Claude model to GPT fallback
-    oai_model = "gpt-4o" if "opus" in model else "gpt-4o-mini"
     resp = await client.chat.completions.create(
-        model=oai_model, max_tokens=max_tokens, messages=oai_messages
+        model="gpt-4o-mini", max_tokens=max_tokens, messages=oai_messages
     )
     return {
         "content": resp.choices[0].message.content,
-        "model_used": oai_model,
+        "model_used": "gpt-4o-mini",
         "provider_used": "openai",
         "prompt_tokens": resp.usage.prompt_tokens,
         "completion_tokens": resp.usage.completion_tokens,
     }
-
-
-async def _stream_anthropic(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
-    import anthropic
-    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
-    kwargs = {"model": model, "max_tokens": max_tokens, "messages": messages, "stream": True}
-    if system:
-        kwargs["system"] = system
-    async with client.messages.stream(**kwargs) as stream:
-        async for text in stream.text_stream:
-            yield text
-
-
-async def _stream_claudible(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
-    payload = {"model": model, "max_tokens": max_tokens, "messages": messages, "stream": True}
-    if system:
-        payload["system"] = system
-    async with httpx.AsyncClient(timeout=600) as client:
-        async with client.stream(
-            "POST",
-            f"{CLAUDIBLE_BASE_URL}/messages",
-            headers={"x-api-key": CLAUDIBLE_API_KEY, "anthropic-version": "2023-06-01"},
-            json=payload,
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if line.startswith("data:"):
-                    import json
-                    data_str = line[5:].strip()
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(data_str)
-                        if data.get("type") == "content_block_delta":
-                            yield data["delta"].get("text", "")
-                    except Exception:
-                        pass

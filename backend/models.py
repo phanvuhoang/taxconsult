@@ -92,6 +92,10 @@ class PriorityDoc(Base):
     # Link
     link_tvpl = Column(Text)
 
+    # Anchor period
+    anchor_from = Column(Date, nullable=True)   # Anchor có hiệu lực từ ngày
+    anchor_to   = Column(Date, nullable=True)   # Anchor hết hiệu lực (NULL = đang dùng)
+
     # Sort
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())

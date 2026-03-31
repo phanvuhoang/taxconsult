@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
 import io
+import json
+import re
 
 from backend.database import get_db
 from backend.models import Report, User
 from backend.auth import get_current_user
+from backend.ai_provider import call_ai
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -107,6 +110,42 @@ async def export_docx(
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.post("/suggest-topics")
+async def suggest_topics(
+    subject: str = Body(...),
+    mode: str = Body("ngành"),
+    tax_types: list = Body([]),
+    current_user: User = Depends(get_current_user),
+):
+    """Dùng Claudible Haiku để gợi ý sections và sub-topics."""
+    system = "Bạn là chuyên gia tư vấn thuế Việt Nam. Trả lời bằng JSON."
+    prompt = f"""Tôi cần viết báo cáo phân tích thuế cho: "{subject}" (loại: {mode}).
+Các sắc thuế quan tâm: {', '.join(tax_types) or 'tổng quát'}.
+
+Hãy gợi ý danh sách sections và sub-topics phù hợp nhất cho báo cáo này.
+Trả về JSON với format:
+{{
+  "sections": [
+    {{"id": "s1", "title": "Tên section", "enabled": true, "sub": ["sub-topic 1", "sub-topic 2"]}},
+    ...
+  ]
+}}
+Tối đa 8 sections, mỗi section tối đa 5 sub-topics. Ưu tiên các vấn đề thuế đặc thù của ngành/chủ đề."""
+
+    result = await call_ai(
+        messages=[{"role": "user", "content": prompt}],
+        system=system,
+        model_tier="haiku",
+        max_tokens=2000,
+    )
+    content = result["content"]
+    json_match = re.search(r'\{.*\}', content, re.DOTALL)
+    if json_match:
+        data = json.loads(json_match.group())
+        return data
+    return {"sections": []}
 
 
 def _html_to_docx(html: str, title: str) -> bytes:

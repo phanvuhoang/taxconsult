@@ -31,7 +31,7 @@ body {
 .doc-html-viewer table { border-collapse: collapse; width: 100%; margin-bottom: 12px; }
 .doc-html-viewer td, .doc-html-viewer th { border: 1px solid #e5e7eb; padding: 6px 10px; }
 .doc-html-viewer th { background: #f3f4f6; font-weight: 600; }
-.doc-html-viewer h1, .doc-html-viewer h2, .doc-html-viewer h3 { color: #028a39; margin: 12px 0 6px; font-weight: 600; }
+.doc-html-viewer h1, .doc-html-viewer h2, .doc-html-viewer h3 { color: #78BE20; margin: 12px 0 6px; font-weight: 600; }
 .doc-html-viewer h1 { font-size: 1.2em; }
 .doc-html-viewer h2 { font-size: 1.1em; }
 .doc-html-viewer p { margin-bottom: 8px; }

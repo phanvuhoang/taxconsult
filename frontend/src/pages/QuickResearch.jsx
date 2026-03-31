@@ -1,28 +1,29 @@
 import { useState } from 'react'
 import { api } from '../api.js'
+import PeriodSelector from '../components/PeriodSelector.jsx'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD']
-const PERIODS = ['2026', '2025', '2024', '2023', '2020-2024', '2025-2026', 'trước 10/2025']
 const MODELS = [
-  { value: 'haiku', label: 'Haiku ⭐', desc: 'Nhanh, tiết kiệm' },
-  { value: 'fast', label: 'Sonnet', desc: 'Cân bằng' },
-  { value: 'strong', label: 'Opus', desc: 'Tốt nhất' },
+  { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
+  { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
+  { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
 ]
 
 export default function QuickResearch() {
   const [question, setQuestion] = useState('')
   const [taxTypes, setTaxTypes] = useState(['TNDN'])
-  const [period, setPeriod] = useState('2026')
-  const [customPeriod, setCustomPeriod] = useState('')
-  const [model, setModel] = useState('haiku')
+  const [period, setPeriod] = useState('hiện_nay')
+  const [model, setModel] = useState('deepseek')
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   function toggleTax(t) {
-    setTaxTypes((prev) =>
-      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
-    )
+    setTaxTypes((prev) => {
+      if (prev.includes(t)) return prev.filter((x) => x !== t)
+      if (prev.length >= 3) return prev  // cap 3
+      return [...prev, t]
+    })
   }
 
   async function handleSubmit(e) {
@@ -35,7 +36,7 @@ export default function QuickResearch() {
       const data = await api.quickResearch({
         question,
         tax_types: taxTypes,
-        time_period: customPeriod || period,
+        time_period: period,
         model_tier: model,
       })
       setResult(data)
@@ -68,7 +69,9 @@ export default function QuickResearch() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Tax types */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Sắc thuế</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Sắc thuế <span className="text-gray-400">(tối đa 3, đầu tiên = chính)</span>
+            </label>
             <div className="flex flex-wrap gap-1">
               {TAX_TYPES.map((t) => (
                 <button
@@ -78,6 +81,8 @@ export default function QuickResearch() {
                   className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
                     taxTypes.includes(t)
                       ? 'bg-brand text-white border-brand'
+                      : taxTypes.length >= 3
+                      ? 'bg-white text-gray-300 border-gray-200 cursor-not-allowed'
                       : 'bg-white text-gray-600 border-gray-300 hover:border-brand'
                   }`}
                 >
@@ -89,23 +94,7 @@ export default function QuickResearch() {
 
           {/* Period */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Giai đoạn</label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand"
-            >
-              {PERIODS.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-            <input
-              type="text"
-              value={customPeriod}
-              onChange={(e) => setCustomPeriod(e.target.value)}
-              placeholder="Hoặc nhập tùy chỉnh..."
-              className="mt-1 w-full border border-gray-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand"
-            />
+            <PeriodSelector value={period} onChange={setPeriod} />
           </div>
 
           {/* Model */}

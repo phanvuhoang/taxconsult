@@ -89,6 +89,7 @@ export const api = {
   deletePriorityDoc: (id) => request('DELETE', `/priority-docs/${id}`),
   getPriorityDocContent: (dbvntax_id) => request('GET', `/priority-docs/content/${dbvntax_id}`),
   suggestPriorityMeta: (dbvntax_id) => request('GET', `/priority-docs/suggest/${dbvntax_id}`),
+  suggestTopics: (data) => request('POST', '/reports/suggest-topics', data),
 
   // Tax Docs — dbvntax browse
   browseDbvntax: (sac_thue, loai) => {

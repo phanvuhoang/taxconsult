@@ -100,3 +100,24 @@ def parse_time_period(time_period: str) -> dict:
         "label": tp,
         "include_expired": False,
     }
+
+
+def parse_period_string(period: str):
+    """
+    Parse period string từ frontend:
+      "hiện_nay"         → (start=None, end=None, use_current_only=True)
+      "truoc:2020"       → (start=None, end="2020-12-31", use_current_only=False)
+      "sau:2022"         → (start="2022-01-01", end=None, use_current_only=False)
+      "khoang:2020:2024" → (start="2020-01-01", end="2024-12-31", use_current_only=False)
+    Returns (time_period_start, time_period_end, use_current_only)
+    """
+    if not period or period == "hiện_nay":
+        return None, None, True  # use_current_only=True → filter anchor_to IS NULL
+    parts = period.split(":")
+    if parts[0] == "truoc" and len(parts) == 2:
+        return None, f"{parts[1]}-12-31", False
+    if parts[0] == "sau" and len(parts) == 2:
+        return f"{parts[1]}-01-01", None, False
+    if parts[0] == "khoang" and len(parts) == 3:
+        return f"{parts[1]}-01-01", f"{parts[2]}-12-31", False
+    return None, None, True

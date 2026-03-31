@@ -1,36 +1,43 @@
 import os
 from dotenv import load_dotenv
-
 load_dotenv()
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://legaldb_user:PbSV8bfxQdta4ljBsDVtZEe74yjMG6l7uW3dSczT8Iaajm9MKX07wHqyf0xBTTMF@10.0.1.11:5432/taxconsult"
-)
-DBVNTAX_DATABASE_URL = os.getenv(
-    "DBVNTAX_DATABASE_URL",
-    "postgresql+asyncpg://legaldb_user:PbSV8bfxQdta4ljBsDVtZEe74yjMG6l7uW3dSczT8Iaajm9MKX07wHqyf0xBTTMF@10.0.1.11:5432/postgres"
-)
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://legaldb_user:PbSV8bfxQdta4ljBsDVtZEe74yjMG6l7uW3dSczT8Iaajm9MKX07wHqyf0xBTTMF@10.0.1.11:5432/taxconsult")
+DBVNTAX_DATABASE_URL = os.getenv("DBVNTAX_DATABASE_URL", "postgresql+asyncpg://legaldb_user:PbSV8bfxQdta4ljBsDVtZEe74yjMG6l7uW3dSczT8Iaajm9MKX07wHqyf0xBTTMF@10.0.1.11:5432/postgres")
 
+# Claudible — OpenAI-completions format (POST /v1/chat/completions, Bearer token)
+# ⚠️ base URL KHÔNG có /v1 ở cuối — code sẽ append /v1/chat/completions
+_raw_claudible_base = os.getenv("ANTHROPIC_BASE_URL", "https://claudible.io")
+CLAUDIBLE_BASE_URL = _raw_claudible_base.rstrip("/").removesuffix("/v1")
+CLAUDIBLE_API_KEY  = os.getenv("ANTHROPIC_AUTH_TOKEN", "")  # Bearer token
+
+# DeepSeek — OpenAI-compatible, endpoint: https://api.deepseek.com
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+
+# Anthropic direct (paid, fallback)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-CLAUDIBLE_BASE_URL = os.getenv("CLAUDIBLE_BASE_URL", "https://claudible.io/v1")
-CLAUDIBLE_API_KEY = os.getenv("CLAUDIBLE_API_KEY", "")
+
+# OpenAI (last resort)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+# Perplexity
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
 
 SECRET_KEY = os.getenv("SECRET_KEY", "changeme-32-char-secret-key-here!")
 ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", "168"))
 APP_PASSWORD = os.getenv("APP_PASSWORD", "admin123")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
-
 ALGORITHM = "HS256"
 
-# Model tier mapping
+# Model tier → model name mapping
+# Claudible models: claude-haiku-4.5, claude-sonnet-4.6 (dấu chấm, KHÔNG dùng gạch ngang)
 MODEL_MAP = {
-    "haiku": "claude-haiku-4-5-20251001",
-    "fast":  "claude-sonnet-4-6",
-    "strong": "claude-opus-4-6",
+    "haiku":    "claude-haiku-4.5",     # Claudible Haiku — fast, free
+    "fast":     "claude-sonnet-4.6",    # Claudible Sonnet — balanced, free
+    "strong":   "claude-sonnet-4.6",    # fallback to Sonnet (Opus not available on Claudible)
+    "deepseek": "deepseek-reasoner",    # DeepSeek V3.2 thinking mode
 }
+DEFAULT_MODEL_TIER = "deepseek"  # Default: DeepSeek Reasoner
 
 DEFAULT_SECTIONS = [
     {"id": "s1", "title": "Tổng quan về ngành / công ty", "enabled": True, "tax_aware": False,

@@ -1,8 +1,13 @@
 import { useState, useRef } from 'react'
 import { api, streamFullReport } from '../api.js'
+import PeriodSelector from '../components/PeriodSelector.jsx'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD']
-const PERIODS = ['2025-2026', '2026', '2025', '2024', '2020-2024', '2023-2025']
+const MODELS = [
+  { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
+  { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
+  { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
+]
 const DEFAULT_SECTIONS = [
   { id: 's1', title: 'Tổng quan về ngành / công ty', enabled: true },
   { id: 's2', title: 'Đặc thù kinh doanh & tài sản', enabled: true },
@@ -17,10 +22,11 @@ export default function FullReport() {
   const [subject, setSubject] = useState('')
   const [mode, setMode] = useState('ngành')
   const [taxTypes, setTaxTypes] = useState(['TNDN', 'GTGT'])
-  const [period, setPeriod] = useState('2025-2026')
-  const [model, setModel] = useState('fast')
+  const [period, setPeriod] = useState('hiện_nay')
+  const [model, setModel] = useState('deepseek')
   const [sonar, setSonar] = useState('sonar')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
+  const [suggesting, setSuggesting] = useState(false)
 
   const [status, setStatus] = useState('idle') // idle|loading|streaming|done|error
   const [progress, setProgress] = useState({ current: 0, total: 0, section: '' })
@@ -35,6 +41,24 @@ export default function FullReport() {
 
   function toggleSection(id) {
     setSections((p) => p.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)))
+  }
+
+  async function handleSuggestTopics() {
+    if (!subject.trim()) {
+      alert('Nhập chủ đề trước nhé!')
+      return
+    }
+    setSuggesting(true)
+    try {
+      const data = await api.suggestTopics({ subject, mode, tax_types: taxTypes })
+      if (data.sections?.length) {
+        setSections(data.sections)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSuggesting(false)
+    }
   }
 
   async function handleSubmit(e) {
@@ -160,36 +184,25 @@ export default function FullReport() {
 
           {/* Period */}
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Giai đoạn</label>
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-brand"
-            >
-              {PERIODS.map((p) => (
-                <option key={p}>{p}</option>
-              ))}
-            </select>
+            <PeriodSelector value={period} onChange={setPeriod} />
           </div>
 
           {/* Model + Sonar */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Model AI</label>
-            <div className="flex gap-3 text-sm mb-2">
-              {[
-                { v: 'fast', l: 'Sonnet ⭐' },
-                { v: 'strong', l: 'Opus' },
-              ].map((m) => (
-                <label key={m.v} className="flex items-center gap-1 cursor-pointer">
+            <div className="space-y-1 mb-2">
+              {MODELS.map((m) => (
+                <label key={m.value} className="flex items-center gap-2 cursor-pointer text-sm">
                   <input
                     type="radio"
                     name="model"
-                    value={m.v}
-                    checked={model === m.v}
-                    onChange={() => setModel(m.v)}
+                    value={m.value}
+                    checked={model === m.value}
+                    onChange={() => setModel(m.value)}
                     className="accent-brand"
                   />
-                  {m.l}
+                  <span>{m.label}</span>
+                  <span className="text-xs text-gray-400">{m.desc}</span>
                 </label>
               ))}
             </div>
@@ -217,9 +230,19 @@ export default function FullReport() {
 
         {/* Sections */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-2">
-            Chọn phần (click để bật/tắt)
-          </label>
+          <div className="flex items-center gap-2 mb-2">
+            <label className="text-xs font-medium text-gray-600">
+              Chọn phần (click để bật/tắt)
+            </label>
+            <button
+              type="button"
+              onClick={handleSuggestTopics}
+              disabled={suggesting || !subject.trim()}
+              className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20 disabled:opacity-50 flex items-center gap-1"
+            >
+              {suggesting ? '⏳ Đang gợi ý...' : '✨ AI gợi ý topics'}
+            </button>
+          </div>
           <div className="flex flex-wrap gap-2">
             {sections.map((s) => (
               <button
