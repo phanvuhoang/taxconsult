@@ -75,6 +75,7 @@ export const api = {
   deleteReport: (id) => request('DELETE', `/reports/${id}`),
 
   // Background job reports
+  listJobs: () => request('GET', '/reports/jobs'),
   startReport: (data) => request('POST', '/reports/start', data),
   getJobStatus: (jobId) => request('GET', `/reports/job/${jobId}`),
   exportDocx: (data) => requestBlob('POST', '/reports/docx', data),

@@ -167,6 +167,10 @@ export default function FullReport() {
   const [error, setError] = useState('')
   const pollRef = useRef(null)
 
+  // Active/recent jobs panel
+  const [recentJobs, setRecentJobs] = useState([])
+  const [showJobs, setShowJobs] = useState(false)
+
   // TOC
   const [toc, setToc] = useState([])
   const [tocOpen, setTocOpen] = useState(true)
@@ -191,12 +195,53 @@ export default function FullReport() {
   const [gammaUrl, setGammaUrl] = useState('')
   const [gammaLoading, setGammaLoading] = useState(false)
 
-  // Load saved reports on mount
+  // Load saved reports + recent jobs on mount
   useEffect(() => {
     api.listReports({ report_type: 'full', limit: 20 })
       .then(setSavedReports)
       .catch(() => {})
+    loadRecentJobs()
   }, [])
+
+  async function loadRecentJobs() {
+    try {
+      const jobs = await api.listJobs()
+      setRecentJobs(jobs)
+      // Auto-resume nếu có job đang running
+      const running = jobs.find(j => j.status === 'running' || j.status === 'pending')
+      if (running && status === 'idle') {
+        resumeJob(running.job_id, running.subject)
+      }
+    } catch (e) {}
+  }
+
+  function resumeJob(id, subjectLabel) {
+    if (pollRef.current) clearInterval(pollRef.current)
+    setJobId(id)
+    setStatus('polling')
+    if (subjectLabel) setSubject(subjectLabel)
+    setProgress({ step: 0, total: 0, label: 'Đang kết nối lại...' })
+    pollRef.current = setInterval(async () => {
+      try {
+        const data = await api.getJobStatus(id)
+        setProgress({ step: data.progress_step, total: data.progress_total, label: data.progress_label || '' })
+        if (data.html_content) setReportHtml(data.html_content)
+        if (data.status === 'done') {
+          clearInterval(pollRef.current)
+          setStatus('done')
+          if (data.report_id) setReportId(data.report_id)
+          if (data.citations?.length) setCitations(data.citations)
+          loadRecentJobs()
+        } else if (data.status === 'error') {
+          clearInterval(pollRef.current)
+          setError(data.error_msg || 'Đã xảy ra lỗi')
+          setStatus('error')
+        }
+      } catch (e) {}
+    }, 3000)
+  }
+
+
 
   // Cleanup poll on unmount
   useEffect(() => {
@@ -403,6 +448,24 @@ export default function FullReport() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">📊 Báo cáo Phân tích Thuế</h1>
+
+      {/* Active/recent jobs panel */}
+      {recentJobs.filter(j => j.status === 'running' || j.status === 'pending').length > 0 && status === 'idle' && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-3">
+          <p className="text-sm font-medium text-amber-800 mb-2">⏳ Đang có báo cáo chưa hoàn thành:</p>
+          {recentJobs.filter(j => j.status === 'running' || j.status === 'pending').map(j => (
+            <div key={j.job_id} className="flex items-center justify-between text-sm">
+              <span className="truncate flex-1 text-gray-700">{j.subject}</span>
+              <span className="text-gray-400 text-xs mx-2">{j.created_at}</span>
+              <button
+                onClick={() => resumeJob(j.job_id, j.subject)}
+                className="text-brand font-medium text-xs hover:underline whitespace-nowrap">
+                ▶ Tiếp tục
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Saved reports panel */}
       {savedReports.length > 0 && (
@@ -623,7 +686,7 @@ export default function FullReport() {
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Có thể đóng tab, mở lại và paste job ID để tiếp tục: <code className="bg-gray-100 px-1 rounded">{jobId}</code>
+                ⏳ Có thể đóng tab — báo cáo vẫn tiếp tục. Mở lại trang, em sẽ tự resume.
               </p>
             </div>
           )}

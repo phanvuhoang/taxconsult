@@ -76,6 +76,32 @@ async def list_reports(
     ]
 
 
+@router.get("/jobs")
+async def list_jobs(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List recent jobs của user — để resume khi mở lại tab."""
+    from sqlalchemy import select, desc
+    q = select(ReportJob).where(ReportJob.user_id == user.id)\
+        .order_by(desc(ReportJob.created_at)).limit(10)
+    result = await db.execute(q)
+    jobs = result.scalars().all()
+    return [
+        {
+            "job_id": j.id,
+            "subject": j.subject,
+            "status": j.status,
+            "progress_step": j.progress_step,
+            "progress_total": j.progress_total,
+            "progress_label": j.progress_label,
+            "report_id": j.report_id,
+            "created_at": j.created_at.strftime("%d/%m %H:%M") if j.created_at else None,
+        }
+        for j in jobs
+    ]
+
+
 @router.get("/job/{job_id}")
 async def get_job_status(
     job_id: str,
