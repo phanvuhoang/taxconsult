@@ -117,11 +117,19 @@ async def _gather_section_context(
 
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    perp_ctx = results[0] if not isinstance(results[0], Exception) else ""
+    perp_result = results[0] if not isinstance(results[0], Exception) else {"content": "", "citations": []}
+    # Handle both dict (new) and str (legacy) return formats
+    if isinstance(perp_result, dict):
+        perp_ctx = perp_result.get("content", "")
+        citations = perp_result.get("citations", [])
+    else:
+        perp_ctx = perp_result or ""
+        citations = []
+
     doc_ctx = results[1] if not isinstance(results[1], Exception) else ""
     cv_ctx = results[2] if not isinstance(results[2], Exception) else ""
 
-    return {"perplexity": perp_ctx, "docs": doc_ctx, "congvan": cv_ctx}
+    return {"perplexity": perp_ctx, "docs": doc_ctx, "congvan": cv_ctx, "citations": citations}
 
 
 async def generate_full_report(

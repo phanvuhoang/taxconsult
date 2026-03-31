@@ -36,6 +36,12 @@ class ExportRequest(BaseModel):
     html_content: str
 
 
+class GammaRequest(BaseModel):
+    subject: str
+    html_content: str
+    num_cards: int = 20
+
+
 # ── List / Get / Delete (unchanged) ──────────────────────────────────────────
 
 @router.get("")
@@ -79,6 +85,12 @@ async def get_job_status(
     job = await db.get(ReportJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    citations = []
+    if job.status == "done" and job.report_id:
+        saved = await db.get(Report, job.report_id)
+        if saved and saved.citations:
+            citations = saved.citations
+
     return {
         "status": job.status,
         "progress_step": job.progress_step,
@@ -87,6 +99,7 @@ async def get_job_status(
         "html_content": job.html_content,
         "error_msg": job.error_msg,
         "report_id": job.report_id,
+        "citations": citations,
     }
 
 
@@ -228,6 +241,68 @@ async def export_slides(
     )
 
 
+@router.post("/gamma")
+async def create_gamma(
+    body: GammaRequest,
+    user: User = Depends(get_current_user),
+):
+    """Tạo Gamma presentation từ report HTML."""
+    import os
+    import httpx as _httpx
+    gamma_key = os.getenv("GAMMA_API_KEY", "")
+    if not gamma_key:
+        raise HTTPException(status_code=400, detail="GAMMA_API_KEY not configured")
+
+    from backend.doc_context import strip_html_tvpl
+    text_content = strip_html_tvpl(body.html_content)
+
+    async with _httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(
+            "https://api.gamma.app/v1/presentations",
+            headers={
+                "Authorization": f"Bearer {gamma_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "title": f"Phân tích thuế: {body.subject}",
+                "text": text_content[:8000],
+                "num_cards": min(body.num_cards, 60),
+                "theme": "professional",
+                "language": "vi",
+            },
+        )
+        try:
+            r.raise_for_status()
+        except Exception:
+            raise HTTPException(status_code=502, detail=f"Gamma API error: {r.text[:200]}")
+        data = r.json()
+        return {"url": data.get("url"), "id": data.get("id")}
+
+
+@router.post("/suggest-subsections")
+async def suggest_subsections(
+    body: dict = Body(...),
+    user: User = Depends(get_current_user),
+):
+    """Gợi ý sub-topics cho một section cụ thể."""
+    title = body.get("title", "")
+    subject = body.get("subject", "")
+    prompt = (
+        f'Đề xuất 4-5 chủ đề con cho phần "{title}" '
+        f'trong báo cáo thuế về: {subject}.\n'
+        f'Trả về JSON array. Chỉ trả về array, không giải thích.\n'
+        f'Ví dụ: ["Chủ đề 1", "Chủ đề 2"]'
+    )
+    result = await call_ai(
+        messages=[{"role": "user", "content": prompt}],
+        model_tier="haiku",
+        max_tokens=400,
+    )
+    match = re.search(r'\[.*?\]', result["content"], re.DOTALL)
+    suggestions = json.loads(match.group()) if match else []
+    return {"suggestions": suggestions}
+
+
 @router.post("/suggest-topics")
 async def suggest_topics(
     subject: str = Body(...),
@@ -325,6 +400,17 @@ async def run_report_job(job_id: str, body: FullReportRequest, user_id: int):
                 full_html += f"<p><em>Giai đoạn: {period['label']} | Sắc thuế: {', '.join(body.tax_types)}</em></p>\n"
 
                 start_time = time.time()
+                all_citations: list = []
+                for ctx in all_contexts:
+                    if isinstance(ctx, dict):
+                        all_citations.extend(ctx.get("citations", []))
+                # deduplicate preserving order
+                seen = set()
+                deduped_citations = []
+                for c in all_citations:
+                    if c not in seen:
+                        seen.add(c)
+                        deduped_citations.append(c)
 
                 for idx, (section, ctx) in enumerate(zip(enabled, all_contexts)):
                     if isinstance(ctx, Exception):
@@ -380,7 +466,7 @@ async def run_report_job(job_id: str, body: FullReportRequest, user_id: int):
                     tax_types=body.tax_types,
                     time_period=body.time_period,
                     content_html=full_html,
-                    citations=[],
+                    citations=deduped_citations,
                     model_used=body.model_tier,
                     duration_ms=duration_ms,
                 )

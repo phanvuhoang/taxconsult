@@ -84,7 +84,10 @@ export const api = {
   quickResearch: (body) => request('POST', '/research/quick', body),
   startFullReport: (body) => request('POST', '/research/full', body),
   researchHistory: () => request('GET', '/research/history'),
+  getResearchHistory: () => request('GET', '/research/history'),
   getResearchSession: (id) => request('GET', `/research/history/${id}`),
+  getResearchById: (id) => request('GET', `/research/history/${id}`),
+  deleteResearch: (id) => request('DELETE', `/research/history/${id}`),
 
   // Tax Docs
   listTaxDocs: (search) =>
@@ -125,6 +128,8 @@ export const api = {
   getPriorityDocContent: (dbvntax_id) => request('GET', `/priority-docs/content/${dbvntax_id}`),
   suggestPriorityMeta: (dbvntax_id) => request('GET', `/priority-docs/suggest/${dbvntax_id}`),
   suggestTopics: (data) => request('POST', '/reports/suggest-topics', data),
+  suggestSubsections: (data) => request('POST', '/reports/suggest-subsections', data),
+  createGamma: (data) => request('POST', '/reports/gamma', data),
 
   // Tax Docs — dbvntax browse
   browseDbvntax: (sac_thue, loai) => {

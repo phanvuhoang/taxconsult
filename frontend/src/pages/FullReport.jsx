@@ -9,21 +9,87 @@ const MODELS = [
   { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
 ]
 const DEFAULT_SECTIONS = [
-  { id: 's1', title: 'Tổng quan về ngành / công ty', enabled: true },
-  { id: 's2', title: 'Đặc thù kinh doanh & tài sản', enabled: true },
-  { id: 's3', title: 'Khung pháp lý & các văn bản thuế áp dụng', enabled: true },
-  { id: 's4', title: 'Phân tích các sắc thuế áp dụng', enabled: true },
-  { id: 's5', title: 'Các vấn đề thuế đặc thù của ngành', enabled: true },
-  { id: 's6', title: 'Thay đổi chính sách thuế gần đây & tác động', enabled: true },
-  { id: 's7', title: 'Thuế quốc tế & chuyển giá', enabled: false },
+  { id: 's1', title: 'Tổng quan về ngành/doanh nghiệp', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
+  { id: 's2', title: 'Đặc thù kinh doanh', enabled: true, tax_aware: false, sub: ['Chuỗi cung ứng', 'Working capital cycle', 'Đặc điểm tài sản'] },
+  { id: 's3', title: 'Các quy định pháp lý', enabled: true, tax_aware: true, sub: ['Luật chuyên ngành', 'Điều kiện kinh doanh', 'Hạn chế FDI'] },
+  { id: 's4', title: 'Phân tích các loại thuế áp dụng', enabled: true, tax_aware: true, sub: ['Thuế TNDN', 'Thuế GTGT', 'Thuế Nhà thầu', 'Thuế TTĐB', 'Thuế XNK'] },
+  { id: 's5', title: 'Các vấn đề thuế đặc thù', enabled: true, tax_aware: true, sub: ['Rủi ro doanh thu/chi phí', 'Chuyển giá', 'Ưu đãi thuế', 'Hóa đơn đặc thù', 'Tranh chấp thuế'] },
+  { id: 's6', title: 'Thông lệ thuế quốc tế', enabled: true, tax_aware: true, sub: ['BEPS', 'Chuyển giá quốc tế', 'So sánh khu vực', 'Hiệp định thuế'] },
+  { id: 's7', title: 'Khuyến nghị & Kết luận', enabled: true, tax_aware: true, sub: ['Tối ưu hóa thuế', 'Tuân thủ', 'Cơ hội ưu đãi', 'Rủi ro cần theo dõi'] },
 ]
 const POLL_INTERVAL = 3000
 
+// ── SectionCard ──────────────────────────────────────────────────────────────
+function SectionCard({ section, subject, onToggle, onUpdateTitle, onAddSub, onRemoveSub, onRemove, onSuggestSubs }) {
+  return (
+    <div className={`border rounded-lg p-3 transition-opacity ${!section.enabled ? 'opacity-50' : 'bg-white'}`}>
+      <div className="flex items-center gap-2 mb-1">
+        <input
+          type="checkbox"
+          checked={section.enabled}
+          onChange={(e) => onToggle(section.id, e.target.checked)}
+          className="accent-brand w-4 h-4 cursor-pointer shrink-0"
+        />
+        <input
+          type="text"
+          defaultValue={section.title}
+          onBlur={(e) => onUpdateTitle(section.id, e.target.value)}
+          className="flex-1 text-sm font-medium border-0 bg-transparent focus:outline-none focus:ring-1 focus:ring-brand/30 rounded px-1"
+        />
+        {section.tax_aware && (
+          <span className="text-xs bg-green-100 text-green-700 rounded px-1 py-0.5 shrink-0">📚 anchor</span>
+        )}
+        <button
+          type="button"
+          onClick={() => onSuggestSubs(section.id)}
+          title="AI gợi ý chủ đề con"
+          className="text-xs px-1.5 py-0.5 rounded border border-gray-200 hover:bg-gray-50 text-gray-400 shrink-0"
+        >
+          ✨
+        </button>
+        <button
+          type="button"
+          onClick={() => onRemove(section.id)}
+          className="text-gray-300 hover:text-red-400 text-sm px-1 shrink-0"
+        >
+          ✕
+        </button>
+      </div>
+      {/* Sub-topics */}
+      <div className="flex flex-wrap gap-1 ml-6">
+        {(section.sub || []).map((sub, j) => (
+          <span key={j} className="inline-flex items-center gap-1 bg-green-50 border border-green-100 rounded-full px-2 py-0.5 text-xs">
+            {sub}
+            <button
+              type="button"
+              onClick={() => onRemoveSub(section.id, j)}
+              className="text-gray-400 hover:text-red-400 leading-none"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            const name = window.prompt('Nhập tên chủ đề con:')
+            if (name?.trim()) onAddSub(section.id, name.trim())
+          }}
+          className="text-xs px-2 py-0.5 rounded-full border border-dashed border-gray-300 hover:border-brand hover:text-brand transition text-gray-400"
+        >
+          + thêm
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function buildTOC(html) {
-  const matches = [...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/gi)]
+  const matches = [...html.matchAll(/<h2[^>]*>([\s\S]*?)<\/h2>/gi)]
   return matches.map((m, i) => ({
     index: i + 1,
-    text: m[1].replace(/<[^>]+>/g, ''),
+    // Strip leading "N. " nếu AI đã tự đánh số → tránh "1. 1. Tên phần"
+    text: m[1].replace(/<[^>]+>/g, '').replace(/^\d+\.\s*/, '').trim(),
     anchor: `section-${i + 1}`,
   }))
 }
@@ -66,6 +132,16 @@ export default function FullReport() {
   // Export state
   const [exporting, setExporting] = useState('')
 
+  // Citations
+  const [citations, setCitations] = useState([])
+  const [refOpen, setRefOpen] = useState(false)
+
+  // Gamma
+  const [createGamma, setCreateGamma] = useState(false)
+  const [numSlides, setNumSlides] = useState(20)
+  const [gammaUrl, setGammaUrl] = useState('')
+  const [gammaLoading, setGammaLoading] = useState(false)
+
   // Load saved reports on mount
   useEffect(() => {
     api.listReports({ report_type: 'full', limit: 20 })
@@ -87,8 +163,36 @@ export default function FullReport() {
     setTaxTypes((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
   }
 
-  function toggleSection(id) {
-    setSections((p) => p.map((s) => (s.id === id ? { ...s, enabled: !s.enabled } : s)))
+  function toggleSection(id, enabled) {
+    setSections((p) => p.map((s) => (s.id === id ? { ...s, enabled } : s)))
+  }
+  function updateTitle(id, title) {
+    setSections((p) => p.map((s) => (s.id === id ? { ...s, title } : s)))
+  }
+  function addSub(id, sub) {
+    setSections((p) => p.map((s) => (s.id === id ? { ...s, sub: [...(s.sub || []), sub] } : s)))
+  }
+  function removeSub(id, idx) {
+    setSections((p) => p.map((s) => s.id === id ? { ...s, sub: s.sub.filter((_, i) => i !== idx) } : s))
+  }
+  function removeSection(id) {
+    setSections((p) => p.filter((s) => s.id !== id))
+  }
+  function addSection() {
+    const id = 's' + Date.now()
+    setSections((p) => [...p, { id, title: 'Phần mới', sub: [], enabled: true, tax_aware: false }])
+  }
+  async function suggestSubs(secId) {
+    const sec = sections.find((s) => s.id === secId)
+    if (!sec || !subject.trim()) return
+    try {
+      const data = await api.suggestSubsections({ title: sec.title, subject })
+      if (data.suggestions?.length) {
+        setSections((p) => p.map((s) => s.id === secId
+          ? { ...s, sub: [...(s.sub || []), ...data.suggestions.filter((sg) => !(s.sub || []).includes(sg))] }
+          : s))
+      }
+    } catch (e) { console.error(e) }
   }
 
   async function handleSuggestTopics() {
@@ -111,6 +215,8 @@ export default function FullReport() {
     setReportHtml('')
     setReportId(null)
     setToc([])
+    setCitations([])
+    setGammaUrl('')
     setStatus('loading')
 
     try {
@@ -136,7 +242,16 @@ export default function FullReport() {
             clearInterval(interval)
             pollRef.current = null
             setReportId(data.report_id)
+            if (data.citations?.length) setCitations(data.citations)
             setStatus('done')
+            // Auto-create Gamma if opted in
+            if (createGamma && data.html_content) {
+              setGammaLoading(true)
+              api.createGamma({ subject, html_content: data.html_content, num_cards: numSlides })
+                .then((r) => setGammaUrl(r.url || ''))
+                .catch(() => {})
+                .finally(() => setGammaLoading(false))
+            }
             // Refresh saved reports list
             api.listReports({ report_type: 'full', limit: 20 }).then(setSavedReports).catch(() => {})
           } else if (data.status === 'error') {
@@ -328,7 +443,7 @@ export default function FullReport() {
         {/* Sections */}
         <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
-            <label className="text-xs font-medium text-gray-600">Chọn phần (click để bật/tắt)</label>
+            <label className="text-xs font-medium text-gray-600">Các phần báo cáo</label>
             <button type="button" onClick={handleSuggestTopics}
               disabled={suggesting || !subject.trim()}
               className="text-xs px-2 py-1 rounded bg-brand/10 text-brand hover:bg-brand/20 disabled:opacity-50 flex items-center gap-1"
@@ -336,18 +451,50 @@ export default function FullReport() {
               {suggesting ? '⏳ Đang gợi ý...' : '✨ AI gợi ý topics'}
             </button>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="space-y-1">
             {sections.map((s) => (
-              <button type="button" key={s.id} onClick={() => toggleSection(s.id)}
-                className={`px-3 py-1 rounded-full text-xs border transition-colors ${
-                  s.enabled
-                    ? 'bg-brand text-white border-brand'
-                    : 'bg-white text-gray-400 border-gray-300'
-                }`}
-              >
-                {s.title}
-              </button>
+              <SectionCard
+                key={s.id}
+                section={s}
+                subject={subject}
+                onToggle={toggleSection}
+                onUpdateTitle={updateTitle}
+                onAddSub={addSub}
+                onRemoveSub={removeSub}
+                onRemove={removeSection}
+                onSuggestSubs={suggestSubs}
+              />
             ))}
+          </div>
+          <button type="button" onClick={addSection}
+            className="mt-2 text-xs px-3 py-1 rounded border border-dashed border-gray-300 hover:border-brand hover:text-brand text-gray-400 transition-colors"
+          >
+            + Thêm phần
+          </button>
+        </div>
+
+        {/* Gamma option */}
+        <div className="mb-4 border rounded-lg p-3 bg-purple-50/30">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={createGamma}
+                onChange={(e) => setCreateGamma(e.target.checked)}
+                className="accent-brand"
+              />
+              <span className="text-sm font-medium">✨ Tự động tạo Gamma Slides sau khi xong</span>
+            </label>
+            {createGamma && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">Số slides:</span>
+                <input
+                  type="number" min={5} max={60} value={numSlides}
+                  onChange={(e) => setNumSlides(Number(e.target.value))}
+                  className="w-16 border rounded px-2 py-1 text-sm"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -446,6 +593,22 @@ export default function FullReport() {
             </div>
           )}
 
+          {/* Gamma result */}
+          {(gammaLoading || gammaUrl) && (
+            <div className="px-5 py-3 border-b border-gray-100 bg-purple-50/30">
+              {gammaLoading && <span className="text-sm text-purple-600">⏳ Đang tạo Gamma Slides...</span>}
+              {gammaUrl && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-purple-700">🎞️ Gamma Slides đã tạo:</span>
+                  <a href={gammaUrl} target="_blank" rel="noopener"
+                    className="text-brand font-medium text-sm hover:underline">
+                    Xem Slides →
+                  </a>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TOC */}
           {toc.length > 0 && (
             <div className="border-b border-gray-100 px-5 py-3 bg-green-50/50">
@@ -476,6 +639,30 @@ export default function FullReport() {
             style={{ fontSize: `${fontSize}px` }}
             dangerouslySetInnerHTML={{ __html: injectAnchors(reportHtml) }}
           />
+
+          {/* Citations / References */}
+          {citations.length > 0 && (
+            <div className="px-6 pb-6 border-t border-gray-100 pt-4">
+              <button
+                onClick={() => setRefOpen(!refOpen)}
+                className="flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-brand"
+              >
+                📎 Nguồn tham khảo ({citations.length}) {refOpen ? '▲' : '▼'}
+              </button>
+              {refOpen && (
+                <ol className="mt-2 space-y-1 text-xs text-gray-500">
+                  {citations.map((url, i) => (
+                    <li key={i}>
+                      <a href={url} target="_blank" rel="noopener"
+                        className="hover:text-brand hover:underline break-all">
+                        [{i + 1}] {url}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

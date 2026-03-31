@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api.js'
 import PeriodSelector from '../components/PeriodSelector.jsx'
 
@@ -18,10 +18,52 @@ export default function QuickResearch() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  const [history, setHistory] = useState([])
+  const [showHistory, setShowHistory] = useState(false)
+
+  useEffect(() => {
+    loadHistory()
+  }, [])
+
+  async function loadHistory() {
+    try {
+      const data = await api.getResearchHistory()
+      setHistory(data)
+    } catch (_) {}
+  }
+
+  async function loadResearch(id) {
+    try {
+      const data = await api.getResearchById(id)
+      setResult({
+        answer_html: data.answer_html,
+        model_used: data.model_used || '',
+        duration_ms: data.duration_ms || 0,
+        tax_docs_used: [],
+        congvan_used: [],
+      })
+      setQuestion(data.question)
+      setTaxTypes(data.tax_types || [])
+      setShowHistory(false)
+    } catch (e) {
+      setError('Không thể tải: ' + e.message)
+    }
+  }
+
+  async function deleteResearch(id, e) {
+    e.stopPropagation()
+    try {
+      await api.deleteResearch(id)
+      setHistory(h => h.filter(x => x.id !== id))
+    } catch (err) {
+      alert('Lỗi xoá: ' + err.message)
+    }
+  }
+
   function toggleTax(t) {
     setTaxTypes((prev) => {
       if (prev.includes(t)) return prev.filter((x) => x !== t)
-      if (prev.length >= 3) return prev  // cap 3
+      if (prev.length >= 3) return prev
       return [...prev, t]
     })
   }
@@ -40,6 +82,7 @@ export default function QuickResearch() {
         model_tier: model,
       })
       setResult(data)
+      loadHistory()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -50,6 +93,40 @@ export default function QuickResearch() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-900 mb-6">🔍 Quick Research</h1>
+
+      {/* History panel */}
+      <div className="mb-4">
+        <button
+          onClick={() => setShowHistory(!showHistory)}
+          className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
+        >
+          📂 Lịch sử ({history.length})
+        </button>
+        {showHistory && (
+          <div className="mt-2 border border-gray-200 rounded-lg divide-y max-h-64 overflow-y-auto bg-white shadow-sm">
+            {history.length === 0 && (
+              <div className="p-3 text-gray-400 text-center text-sm">Chưa có lịch sử</div>
+            )}
+            {history.map((h) => (
+              <div key={h.id} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 text-sm">
+                <span
+                  className="flex-1 truncate cursor-pointer text-brand hover:underline"
+                  onClick={() => loadResearch(h.id)}
+                >
+                  {h.question}
+                </span>
+                <span className="text-gray-400 text-xs shrink-0">{h.created_at_display}</span>
+                <button
+                  onClick={(e) => deleteResearch(h.id, e)}
+                  className="text-gray-300 hover:text-red-400 text-xs px-1 shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="mb-4">
@@ -126,9 +203,7 @@ export default function QuickResearch() {
             className="bg-brand hover:bg-brand-dark text-white font-medium px-6 py-2 rounded-lg transition-colors disabled:opacity-60 flex items-center gap-2"
           >
             {loading ? (
-              <>
-                <span className="animate-spin">⏳</span> Đang tra cứu...
-              </>
+              <><span className="animate-spin inline-block">⏳</span> Đang tra cứu...</>
             ) : (
               '🔍 Tìm hiểu ngay'
             )}
@@ -146,9 +221,11 @@ export default function QuickResearch() {
           <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 className="font-semibold text-gray-800">Kết quả</h2>
             <div className="flex gap-2 items-center">
-              <span className="text-xs text-gray-400">
-                {result.model_used} · {(result.duration_ms / 1000).toFixed(1)}s
-              </span>
+              {result.model_used && (
+                <span className="text-xs text-gray-400">
+                  {result.model_used} · {(result.duration_ms / 1000).toFixed(1)}s
+                </span>
+              )}
               <button
                 onClick={() => navigator.clipboard.writeText(result.answer_html)}
                 className="text-xs text-brand hover:underline"
@@ -169,10 +246,7 @@ export default function QuickResearch() {
                 <div className="mb-2">
                   <span className="text-xs font-medium text-gray-600">Văn bản đã dùng: </span>
                   {result.tax_docs_used.map((d) => (
-                    <span
-                      key={d.so_hieu}
-                      className="inline-block bg-brand text-white text-xs px-2 py-0.5 rounded mr-1"
-                    >
+                    <span key={d.so_hieu} className="inline-block bg-brand text-white text-xs px-2 py-0.5 rounded mr-1">
                       {d.so_hieu}
                     </span>
                   ))}
@@ -182,10 +256,7 @@ export default function QuickResearch() {
                 <div>
                   <span className="text-xs font-medium text-gray-600">Công văn đã dùng: </span>
                   {result.congvan_used.map((d) => (
-                    <span
-                      key={d.so_hieu}
-                      className="inline-block bg-blue-500 text-white text-xs px-2 py-0.5 rounded mr-1"
-                    >
+                    <span key={d.so_hieu} className="inline-block bg-blue-500 text-white text-xs px-2 py-0.5 rounded mr-1">
                       {d.so_hieu}
                     </span>
                   ))}

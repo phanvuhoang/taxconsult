@@ -191,3 +191,20 @@ async def get_research_session(
         "duration_ms": session.duration_ms,
         "created_at": session.created_at.isoformat() if session.created_at else None,
     }
+
+
+@router.delete("/history/{session_id}")
+async def delete_research_session(
+    session_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.models import ResearchSession
+    session = await db.get(ResearchSession, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Not found")
+    if session.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    await db.delete(session)
+    await db.commit()
+    return {"ok": True}

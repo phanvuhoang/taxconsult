@@ -3,13 +3,13 @@ import httpx
 from backend.config import PERPLEXITY_API_KEY
 
 
-async def perplexity_search(query: str, model: str = "sonar") -> str:
+async def perplexity_search(query: str, model: str = "sonar") -> dict:
     """
     Search via Perplexity API.
-    Returns formatted context string or empty string if unavailable.
+    Returns dict: {"content": str, "citations": list[str]}
     """
     if not PERPLEXITY_API_KEY:
-        return ""
+        return {"content": "", "citations": []}
 
     payload = {
         "model": model,
@@ -43,10 +43,10 @@ async def perplexity_search(query: str, model: str = "sonar") -> str:
         content = data["choices"][0]["message"]["content"]
         citations = data.get("citations", [])
 
-        result = f"[Kết quả nghiên cứu từ Perplexity ({model})]\n{content}"
+        formatted = f"[Kết quả nghiên cứu từ Perplexity ({model})]\n{content}"
         if citations:
-            result += "\n\nNguồn:\n" + "\n".join(f"- {c}" for c in citations[:10])
-        return result
+            formatted += "\n\nNguồn:\n" + "\n".join(f"- {c}" for c in citations[:10])
+        return {"content": formatted, "citations": citations}
 
     except Exception as e:
-        return f"[Perplexity unavailable: {e}]"
+        return {"content": f"[Perplexity unavailable: {e}]", "citations": []}
