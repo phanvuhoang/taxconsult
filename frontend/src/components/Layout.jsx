@@ -20,6 +20,20 @@ export default function Layout() {
     api.me().then(setUser).catch(() => {})
   }, [])
 
+  useEffect(() => {
+    function handleScroll() {
+      const el = document.getElementById('report-content')
+      if (!el) return
+      const scrolled = window.scrollY
+      const total = el.offsetHeight - window.innerHeight
+      const pct = Math.min(100, total > 0 ? (scrolled / total) * 100 : 0)
+      const bar = document.getElementById('reading-bar')
+      if (bar) bar.style.width = pct + '%'
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
   function logout() {
     localStorage.removeItem('token')
     navigate('/login')
@@ -27,6 +41,12 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Reading progress bar */}
+      <div
+        id="reading-bar"
+        className="fixed top-0 left-0 h-1 bg-brand z-50 transition-all duration-150"
+        style={{ width: '0%' }}
+      />
       {/* Sidebar */}
       <aside
         className={`flex flex-col bg-gray-900 text-white transition-all duration-200 ${

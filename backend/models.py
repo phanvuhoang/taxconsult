@@ -2,6 +2,7 @@ from sqlalchemy import (
     Column, Integer, String, Text, Boolean, DateTime, Date,
     ForeignKey, ARRAY, func
 )
+from datetime import datetime
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from backend.database import Base
@@ -100,6 +101,23 @@ class PriorityDoc(Base):
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ReportJob(Base):
+    __tablename__ = "report_jobs"
+
+    id             = Column(String, primary_key=True)  # UUID
+    subject        = Column(String)
+    user_id        = Column(Integer, nullable=True)
+    status         = Column(String, default="pending")  # pending|running|done|error
+    progress_step  = Column(Integer, default=0)
+    progress_total = Column(Integer, default=0)
+    progress_label = Column(String, default="")
+    html_content   = Column(Text, default="")
+    error_msg      = Column(String, nullable=True)
+    report_id      = Column(Integer, nullable=True)   # saved Report.id when done
+    created_at     = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ResearchSession(Base):

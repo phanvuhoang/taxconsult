@@ -354,6 +354,30 @@ async def verify_legal_refs_db(html: str, dbvntax_db) -> str:
     return html
 
 
+async def get_anchor_context(tax_types: list, time_period: str) -> str:
+    """
+    Wrapper: lấy toàn bộ anchor docs từ dbvntax và format thành context string.
+    Dùng cho background job — tự mở sessions riêng.
+    """
+    from backend.time_period import parse_period_string
+    from backend.database import AsyncSessionLocal, DbvntaxSession
+
+    start, end, _use_current = parse_period_string(time_period)
+
+    async with AsyncSessionLocal() as tc_db:
+        async with DbvntaxSession() as dbvntax_db:
+            priority_ctx = await get_priority_docs_context(
+                tc_db, dbvntax_db, tax_types,
+                time_period_end=end,
+                time_period_start=start,
+            )
+            docs_ctx = await get_relevant_docs(dbvntax_db, tax_types, time_period_end=end)
+            cv_ctx = await get_relevant_congvan(dbvntax_db, tax_types)
+
+    parts = [p for p in [priority_ctx, docs_ctx, cv_ctx] if p]
+    return "\n\n".join(parts)
+
+
 async def get_priority_doc_ids(db, tax_types: list) -> list:
     """Return list of dbvntax_ids for all priority docs (used to exclude from get_relevant_docs)."""
     from sqlalchemy import select
