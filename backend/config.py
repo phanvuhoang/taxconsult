@@ -29,13 +29,17 @@ APP_PASSWORD = os.getenv("APP_PASSWORD", "admin123")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
 ALGORITHM = "HS256"
 
+# OpenRouter
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+
 # Model tier → model name mapping
 # Claudible models: claude-haiku-4.5, claude-sonnet-4.6 (dấu chấm, KHÔNG dùng gạch ngang)
 MODEL_MAP = {
-    "haiku":    "claude-haiku-4.5",     # Claudible Haiku — fast, free
-    "fast":     "claude-sonnet-4.6",    # Claudible Sonnet — balanced, free
-    "strong":   "claude-sonnet-4.6",    # fallback to Sonnet (Opus not available on Claudible)
-    "deepseek": "deepseek-reasoner",    # DeepSeek V3.2 thinking mode
+    "haiku":    "claude-haiku-4.5",              # Claudible Haiku — fast, free
+    "fast":     "claude-sonnet-4.6",             # Claudible Sonnet — balanced, free
+    "strong":   "claude-sonnet-4.6",             # fallback to Sonnet (Opus not available on Claudible)
+    "deepseek": "deepseek-reasoner",             # DeepSeek V3.2 thinking mode
+    "qwen":     "qwen/qwen3.6-plus:free",        # Qwen 3.6 Plus via OpenRouter (free)
 }
 DEFAULT_MODEL_TIER = "deepseek"  # Default: DeepSeek Reasoner
 

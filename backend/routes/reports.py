@@ -76,6 +76,26 @@ async def list_reports(
     ]
 
 
+@router.post("/job/{job_id}/cancel")
+async def cancel_job(
+    job_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Huỷ job bị stuck — đánh dấu error để frontend thoát khỏi polling."""
+    job = await db.get(ReportJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if job.status in ("done", "error"):
+        return {"ok": True, "status": job.status}
+    job.status = "error"
+    job.error_msg = "Huỷ bởi người dùng"
+    await db.commit()
+    return {"ok": True, "status": "error"}
+
+
 @router.get("/jobs")
 async def list_jobs(
     user: User = Depends(get_current_user),
@@ -111,6 +131,16 @@ async def get_job_status(
     job = await db.get(ReportJob, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # Auto-timeout: job running/pending nhưng không update trong 30 phút → mark error
+    if job.status in ("running", "pending") and job.created_at:
+        import datetime
+        age_minutes = (datetime.datetime.utcnow() - job.created_at).total_seconds() / 60
+        if age_minutes > 30:
+            job.status = "error"
+            job.error_msg = "Job timeout (>30 phút không phản hồi). Vui lòng thử lại."
+            await db.commit()
+
     citations = []
     if job.status == "done" and job.report_id:
         saved = await db.get(Report, job.report_id)

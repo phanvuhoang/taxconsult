@@ -78,6 +78,7 @@ export const api = {
   listJobs: () => request('GET', '/reports/jobs'),
   startReport: (data) => request('POST', '/reports/start', data),
   getJobStatus: (jobId) => request('GET', `/reports/job/${jobId}`),
+  cancelJob: (jobId) => request('POST', `/reports/job/${jobId}/cancel`),
   exportDocx: (data) => requestBlob('POST', '/reports/docx', data),
   exportSlides: (data) => requestBlob('POST', '/reports/slides', data),
 

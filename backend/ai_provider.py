@@ -1,4 +1,4 @@
-"""AI provider abstraction — Claudible (primary, free) + DeepSeek + Anthropic + OpenAI."""
+"""AI provider abstraction — Claudible (primary, free) + DeepSeek + OpenRouter + Anthropic + OpenAI."""
 import httpx
 import json
 from typing import AsyncGenerator, Optional
@@ -6,6 +6,7 @@ from backend.config import (
     CLAUDIBLE_BASE_URL, CLAUDIBLE_API_KEY,
     DEEPSEEK_API_KEY,
     ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    OPENROUTER_API_KEY,
     MODEL_MAP, DEFAULT_MODEL_TIER,
 )
 
@@ -29,6 +30,13 @@ async def call_ai(
         result = await _call_deepseek(messages, system, model, max_tokens)
         if result:
             return result
+
+    # Route: OpenRouter (Qwen and others)
+    if tier == "qwen" or "openrouter" in model or (model and model.startswith("qwen/")):
+        if OPENROUTER_API_KEY:
+            result = await _call_openrouter(messages, system, model, max_tokens)
+            if result:
+                return result
 
     # Route: Claudible (Haiku / Sonnet)
     if CLAUDIBLE_API_KEY:
@@ -62,6 +70,12 @@ async def stream_ai(
     if tier == "deepseek" or "deepseek" in model:
         if DEEPSEEK_API_KEY:
             async for chunk in _stream_deepseek(messages, system, model, max_tokens):
+                yield chunk
+            return
+
+    if tier == "qwen" or (model and model.startswith("qwen/")):
+        if OPENROUTER_API_KEY:
+            async for chunk in _stream_openrouter(messages, system, model, max_tokens):
                 yield chunk
             return
 
@@ -205,6 +219,89 @@ async def _stream_deepseek(messages, system, model, max_tokens) -> AsyncGenerato
                             pass
     except Exception as e:
         print(f"DeepSeek stream {model} error: {e}")
+
+
+# ── OpenRouter (Qwen and others) ──────────────────────────────────
+async def _call_openrouter(messages, system, model, max_tokens) -> Optional[dict]:
+    if not OPENROUTER_API_KEY:
+        return None
+    oai_messages = []
+    if system:
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    try:
+        async with httpx.AsyncClient(timeout=300) as client:
+            r = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://taxconsult.gpt4vn.com",
+                    "X-Title": "TaxConsult VN",
+                },
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "messages": oai_messages,
+                    # Enable reasoning for Qwen3
+                    "extra_body": {"reasoning": {"enabled": True}} if "qwen3" in model.lower() else {},
+                },
+            )
+            r.raise_for_status()
+            data = r.json()
+            return {
+                "content": data["choices"][0]["message"]["content"],
+                "model_used": model,
+                "provider_used": "openrouter",
+                "prompt_tokens": data.get("usage", {}).get("prompt_tokens", 0),
+                "completion_tokens": data.get("usage", {}).get("completion_tokens", 0),
+            }
+    except Exception as e:
+        print(f"OpenRouter {model} error: {e}")
+        return None
+
+
+async def _stream_openrouter(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
+    if not OPENROUTER_API_KEY:
+        return
+    oai_messages = []
+    if system:
+        oai_messages.append({"role": "system", "content": system})
+    oai_messages.extend(messages)
+    try:
+        async with httpx.AsyncClient(timeout=600) as client:
+            async with client.stream(
+                "POST",
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://taxconsult.gpt4vn.com",
+                    "X-Title": "TaxConsult VN",
+                },
+                json={
+                    "model": model,
+                    "max_tokens": max_tokens,
+                    "messages": oai_messages,
+                    "stream": True,
+                    "extra_body": {"reasoning": {"enabled": True}} if "qwen3" in model.lower() else {},
+                },
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if line.startswith("data:"):
+                        data_str = line[5:].strip()
+                        if data_str == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(data_str)
+                            delta = data["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                yield delta
+                        except Exception:
+                            pass
+    except Exception as e:
+        print(f"OpenRouter stream {model} error: {e}")
 
 
 # ── Anthropic direct (fallback, paid) ─────────────────────────────

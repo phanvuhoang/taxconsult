@@ -14,6 +14,7 @@ const MODELS = [
   { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
   { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
   { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
+  { value: 'qwen',     label: '🌟 Qwen 3.6 Plus',    desc: 'OpenRouter, miễn phí' },
 ]
 const DEFAULT_SECTIONS = [
   { id: 's1', title: 'Tổng quan về ngành/doanh nghiệp', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
@@ -228,17 +229,30 @@ export default function FullReport() {
         if (data.html_content) setReportHtml(data.html_content)
         if (data.status === 'done') {
           clearInterval(pollRef.current)
+          pollRef.current = null
           setStatus('done')
           if (data.report_id) setReportId(data.report_id)
           if (data.citations?.length) setCitations(data.citations)
           loadRecentJobs()
         } else if (data.status === 'error') {
           clearInterval(pollRef.current)
+          pollRef.current = null
           setError(data.error_msg || 'Đã xảy ra lỗi')
           setStatus('error')
         }
       } catch (e) {}
     }, 3000)
+  }
+
+  async function cancelJob() {
+    if (!jobId) return
+    try {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
+      await api.cancelJob(jobId)
+    } catch (e) {}
+    setStatus('idle')
+    setProgress({ step: 0, total: 0, label: '' })
+    setError('')
   }
 
 
@@ -677,7 +691,16 @@ export default function FullReport() {
             <div className="px-5 py-3 border-b border-gray-100">
               <div className="flex items-center justify-between text-sm mb-2">
                 <span className="text-gray-600">{progress.label || 'Đang xử lý...'}</span>
-                <span className="text-brand font-medium">{progressPct}%</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-brand font-medium">{progressPct}%</span>
+                  <button
+                    onClick={cancelJob}
+                    className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50"
+                    title="Huỷ job và reset form"
+                  >
+                    ✕ Huỷ
+                  </button>
+                </div>
               </div>
               <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                 <div
