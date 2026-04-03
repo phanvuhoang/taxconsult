@@ -1,9 +1,13 @@
 """
 doc_context.py — Pull and format tax document context from dbvntax DB
 for injection into AI prompts.
+
+Fix #2: Chunked RAG via pgvector cosine similarity search.
+Thay vì dump toàn bộ docs → chỉ inject top-K chunks liên quan nhất.
 """
 import json
 import re
+import httpx
 from bs4 import BeautifulSoup
 
 SAC_THUE_MAP = {
@@ -405,3 +409,97 @@ async def get_priority_doc_ids(db, tax_types: list) -> list:
 
     result = await db.execute(select(PriorityDoc.dbvntax_id))
     return list(result.scalars().all())
+
+
+# ── Fix #2: Semantic RAG via pgvector ────────────────────────────────────────
+
+async def _get_openai_embedding(text: str) -> list | None:
+    """Get OpenAI text-embedding-3-small vector for a query string."""
+    from backend.config import OPENAI_API_KEY
+    if not OPENAI_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                headers={"Authorization": f"Bearer {OPENAI_API_KEY}",
+                         "Content-Type": "application/json"},
+                json={"model": "text-embedding-3-small", "input": text[:8000]},
+            )
+            r.raise_for_status()
+            return r.json()["data"][0]["embedding"]
+    except Exception as e:
+        print(f"[embedding] error: {e}")
+        return None
+
+
+async def get_relevant_docs_semantic(
+    dbvntax_db,
+    query: str,
+    tax_types: list,
+    top_k: int = 5,
+    time_period_end: str = None,
+    exclude_dbvntax_ids: list = None,
+) -> str:
+    """
+    Fix #2: Semantic RAG — embed query → pgvector cosine search → top-K chunks.
+    Fallback về full-text search nếu không có embedding.
+    """
+    from sqlalchemy import text
+
+    vector = await _get_openai_embedding(query)
+
+    sac_thue_values = []
+    for tt in tax_types:
+        sac_thue_values.extend(SAC_THUE_MAP.get(tt, [tt]))
+
+    if vector is not None:
+        # pgvector cosine similarity: <=> operator (1 - cosine_similarity)
+        conditions = ["embedding IS NOT NULL"]
+        params: dict = {"top_k": top_k, "vector": str(vector)}
+        if sac_thue_values:
+            conditions.append("sac_thue && ARRAY[:sac_thue]::varchar[]")
+            params["sac_thue"] = sac_thue_values
+        if time_period_end:
+            conditions.append("(hieu_luc_tu IS NULL OR hieu_luc_tu <= :period_end)")
+            params["period_end"] = time_period_end
+        if exclude_dbvntax_ids:
+            conditions.append("id != ALL(:exclude_ids)")
+            params["exclude_ids"] = exclude_dbvntax_ids
+        # Only active docs
+        conditions.append("(het_hieu_luc_tu IS NULL OR het_hieu_luc_tu > now())")
+
+        where = " AND ".join(conditions)
+        sql = f"""
+            SELECT id, so_hieu, ten, loai, co_quan,
+                   ngay_ban_hanh::text, hieu_luc_tu::text, het_hieu_luc_tu::text,
+                   tinh_trang, noi_dung, hieu_luc_index, link_tvpl,
+                   1 - (embedding <=> :vector::vector) AS similarity
+            FROM documents
+            WHERE {where}
+            ORDER BY embedding <=> :vector::vector
+            LIMIT :top_k
+        """
+        try:
+            result = await dbvntax_db.execute(text(sql), params)
+            rows = result.mappings().all()
+            if rows:
+                parts = [f"## VĂN BẢN PHÁP LUẬT LIÊN QUAN — Semantic Search (top {top_k})\n"
+                         f"(Đã chọn theo độ liên quan với: \"{query[:80]}\")\n"]
+                for row in rows:
+                    d = dict(row)
+                    sim = d.pop("similarity", 0)
+                    label = f"similarity={sim:.2f}" if sim else ""
+                    parts.append(f"<!-- {label} -->\n" + format_doc_for_context(d))
+                return "\n".join(parts)
+        except Exception as e:
+            print(f"[semantic_search] pgvector error: {e}")
+            # Fall through to keyword search
+
+    # Fallback: full-text keyword search (existing logic)
+    keywords = [w for w in query.lower().split() if len(w) > 2][:5]
+    return await get_relevant_docs(
+        dbvntax_db, tax_types, keywords=keywords,
+        time_period_end=time_period_end,
+        exclude_dbvntax_ids=exclude_dbvntax_ids,
+    )

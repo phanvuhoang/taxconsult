@@ -6,10 +6,11 @@ from typing import AsyncGenerator
 
 from backend.config import DEFAULT_SECTIONS
 from backend.doc_context import (
-    get_priority_docs_context, get_relevant_docs, get_relevant_congvan, get_priority_doc_ids
+    get_priority_docs_context, get_relevant_docs, get_relevant_congvan,
+    get_relevant_docs_semantic, get_priority_doc_ids,
 )
-from backend.ai_provider import stream_ai
-from backend.perplexity import perplexity_search
+from backend.ai_provider import stream_ai, call_ai
+from backend.perplexity import perplexity_search, perplexity_search_legal
 from backend.time_period import parse_time_period
 
 # In-memory job store (use Redis in production)
@@ -31,50 +32,78 @@ def get_job(job_id: str) -> dict:
 
 
 SECTION_SYSTEM = (
-    "Bạn là chuyên gia thuế Big 4 Việt Nam (Deloitte/PwC/EY/KPMG) "
-    "viết báo cáo phân tích thuế chuyên nghiệp bằng tiếng Việt."
+    "Bạn là chuyên gia thuế Big 4 Việt Nam (Deloitte/PwC/EY/KPMG) với 30 năm kinh nghiệm. "
+    "Khi viết báo cáo, bạn LUÔN LUÔN ưu tiên văn bản pháp luật được cung cấp hơn kiến thức "
+    "được huấn luyện. Nếu có mâu thuẫn giữa văn bản cung cấp và kiến thức nội tại, "
+    "BẮT BUỘC theo văn bản được cung cấp. Tuyệt đối không bịa số hiệu văn bản."
 )
+
+# ── Fix #1: Citation-First Prompting ─────────────────────────────────────────
+# Bắt model trích dẫn điều khoản CỤ THỂ trước, rồi mới viết phân tích dựa trên đó.
+# Kỹ thuật này ép model "commit" với nguồn trước khi viết → giảm hallucination.
 
 SECTION_PROMPT_TAX = """Viết PHẦN: "{section_title}"
 Chủ đề phân tích: {subject} ({mode})
 Giai đoạn áp dụng: {time_period}
 
-=== VĂN BẢN ƯU TIÊN (admin đã chọn — ưu tiên cao nhất) ===
+════════════════════════════════════════════════════════
+VĂN BẢN PHÁP LUẬT — ĐÂY LÀ NGUỒN DUY NHẤT BẠN ĐƯỢC DÙNG
+(Không dùng kiến thức nội tại nếu mâu thuẫn với các văn bản dưới đây)
+════════════════════════════════════════════════════════
+
 {priority_context}
 
-=== VĂN BẢN PHÁP LUẬT TỪ DATABASE ===
 {tax_docs_context}
 
-=== CÔNG VĂN HƯỚNG DẪN TỪ DATABASE ===
 {congvan_context}
 
-=== DỮ LIỆU NGHIÊN CỨU TỪ PERPLEXITY ===
+════════════════════════════════════════════════════════
+NGUỒN BỔ SUNG (thông tin thực tế, tin tức, số liệu thị trường)
+════════════════════════════════════════════════════════
+
 {perplexity_context}
 
-YÊU CẦU TUYỆT ĐỐI:
+════════════════════════════════════════════════════════
+HƯỚNG DẪN VIẾT — ĐỌC KỸ TRƯỚC KHI VIẾT
+════════════════════════════════════════════════════════
+
+BƯỚC 1 — TRÍCH DẪN (làm nội bộ, không xuất ra):
+Trước khi viết, hãy xác định TẤT CẢ điều khoản trong văn bản trên liên quan đến "{section_title}".
+Ghi nhớ: [Số hiệu VB] → Điều X, Khoản Y, Điểm Z: <nội dung chính xác>
+
+BƯỚC 2 — VIẾT PHÂN TÍCH dựa trên điều khoản đã xác định ở Bước 1:
+
+YÊU CẦU BẮT BUỘC:
 1. Output HTML thuần túy — bắt đầu bằng <h2>{section_number}. {section_title}</h2>
-2. ƯU TIÊN VĂN BẢN ƯU TIÊN hơn mọi nguồn khác
-3. Trích dẫn ĐIỀU KHOẢN CỤ THỂ: "theo điểm X, khoản Y, Điều Z, NĐ/TT số..."
-4. Nếu quy định thay đổi theo thời gian → bảng so sánh Before/After:
-   <table><tr><th>Giai đoạn</th><th>Quy định</th><th>Văn bản</th></tr>...</table>
-5. Dẫn công văn cụ thể khi có (số hiệu + nội dung ngắn)
-6. KHÔNG trích dẫn văn bản đã hết hiệu lực (trừ khi phân tích lịch sử)
-7. KHÔNG bịa số hiệu văn bản
-8. Tối thiểu 700 từ
-9. Trích dẫn nguồn sau mỗi câu có số liệu: <a href="#" target="_blank">[N]</a>
+2. Mỗi luận điểm PHẢI có trích dẫn điều khoản cụ thể ngay trong câu:
+   "theo khoản X Điều Y <strong>Luật/NĐ/TT số ABC</strong>" — không ghi chung chung
+3. Nếu quy định thay đổi theo thời gian → PHẢI dùng bảng so sánh:
+   <table><tr><th>Giai đoạn</th><th>Quy định</th><th>Căn cứ pháp lý</th></tr>...</table>
+4. Công văn hướng dẫn → trích số hiệu + tóm tắt nội dung hướng dẫn
+5. ⛔ NGHIÊM CẤM trích dẫn văn bản KHÔNG CÓ trong danh sách trên (dù biết từ training)
+6. ⛔ NGHIÊM CẤM dùng mốc thời gian/số liệu từ training nếu mâu thuẫn với văn bản cung cấp
+7. Văn bản đã hết hiệu lực → chỉ đề cập khi so sánh lịch sử, phải ghi rõ ⚠️ đã hết hiệu lực
+8. Tối thiểu 700 từ — đi sâu vào từng điều khoản, không viết chung chung
 """
 
 SECTION_PROMPT_GENERAL = """Viết PHẦN: "{section_title}"
 Chủ đề phân tích: {subject} ({mode})
 Giai đoạn áp dụng: {time_period}
 
-=== DỮ LIỆU NGHIÊN CỨU TỪ PERPLEXITY ===
+════════════════════════════════════════════════════════
+THÔNG TIN NGHIÊN CỨU
+════════════════════════════════════════════════════════
+
 {perplexity_context}
 
-YÊU CẦU:
+════════════════════════════════════════════════════════
+YÊU CẦU
+════════════════════════════════════════════════════════
+
 1. Output HTML thuần túy — bắt đầu bằng <h2>{section_number}. {section_title}</h2>
-2. Viết chi tiết, có số liệu thực tế
-3. Tối thiểu 500 từ
+2. Viết chi tiết, có số liệu thực tế từ nguồn nghiên cứu
+3. Trích dẫn nguồn cụ thể sau mỗi số liệu/luận điểm quan trọng
+4. Tối thiểu 500 từ
 """
 
 
@@ -92,25 +121,40 @@ async def _gather_section_context(
     sonar_model: str,
     exclude_dbvntax_ids: list = None,
 ) -> dict:
-    """Gather all context for a single section in parallel."""
-    keywords = _quick_keywords(subject)
-    perplexity_query = f"Phân tích {section['title']} cho {subject} Việt Nam {period['label']}"
+    """
+    Gather all context for a single section in parallel.
+    Fix #2: semantic RAG — dùng pgvector cosine search thay vì keyword dump.
+    Fix #3: site-filtered Perplexity — tìm văn bản pháp luật mới nhất từ nguồn chính thống.
+    """
+    # Build semantic query combining section title + subject
+    semantic_query = f"{section['title']} {subject} {' '.join(tax_types)}"
+    perplexity_query = f"{section['title']}: {subject} Việt Nam {period['label']}"
 
     async def empty():
         return ""
 
-    tasks = [perplexity_search(perplexity_query, sonar_model)]
+    # Fix #3: dùng perplexity_search_legal cho tax-aware sections
+    if section.get("tax_aware"):
+        perp_task = perplexity_search_legal(perplexity_query, sonar_model)
+    else:
+        perp_task = perplexity_search(perplexity_query, sonar_model)
+
+    tasks = [perp_task]
 
     if section.get("tax_aware") and dbvntax_db:
+        # Fix #2: semantic search thay vì keyword dump
         tasks.append(
-            get_relevant_docs(
-                dbvntax_db, tax_types, keywords=keywords,
+            get_relevant_docs_semantic(
+                dbvntax_db,
+                query=semantic_query,
+                tax_types=tax_types,
+                top_k=5,
                 time_period_end=period["end_date"],
-                include_expired=period["include_expired"],
                 exclude_dbvntax_ids=exclude_dbvntax_ids,
             )
         )
-        tasks.append(get_relevant_congvan(dbvntax_db, tax_types, keywords=keywords))
+        tasks.append(get_relevant_congvan(dbvntax_db, tax_types,
+                                          keywords=[w for w in subject.lower().split() if len(w) > 2][:5]))
     else:
         tasks.append(empty())
         tasks.append(empty())
@@ -118,7 +162,6 @@ async def _gather_section_context(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     perp_result = results[0] if not isinstance(results[0], Exception) else {"content": "", "citations": []}
-    # Handle both dict (new) and str (legacy) return formats
     if isinstance(perp_result, dict):
         perp_ctx = perp_result.get("content", "")
         citations = perp_result.get("citations", [])

@@ -423,7 +423,6 @@ async def run_report_job(job_id: str, body: FullReportRequest, user_id: int):
     )
     from backend.time_period import parse_time_period
     from backend.doc_context import get_priority_docs_context, get_priority_doc_ids
-
     async with AsyncSessionLocal() as db:
         async with DbvntaxSession() as dbvntax_db:
             job = await db.get(ReportJob, job_id)
