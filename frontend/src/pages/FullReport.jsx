@@ -10,11 +10,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD']
-const MODELS = [
+const MODELS_STATIC = [
   { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
   { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
   { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
-  { value: 'qwen',     label: '🌟 Qwen 3.6 Plus',    desc: 'OpenRouter, miễn phí' },
 ]
 const DEFAULT_SECTIONS = [
   { id: 's1', title: 'Tổng quan về ngành/doanh nghiệp', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
@@ -155,6 +154,7 @@ export default function FullReport() {
   const [sonar, setSonar] = useState('sonar-pro')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [suggesting, setSuggesting] = useState(false)
+  const [models, setModels] = useState(MODELS_STATIC)
 
   // dnd-kit sensors
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -202,6 +202,26 @@ export default function FullReport() {
       .then(setSavedReports)
       .catch(() => {})
     loadRecentJobs()
+  }, [])
+
+  // Fetch dynamic model info from backend (env-driven)
+  useEffect(() => {
+    api.getModelInfo().then((info) => {
+      if (info?.openrouter_model) {
+        // Extract a friendly display name: "qwen/qwen3.6-plus:free" → "Qwen3.6 Plus (free)"
+        const raw = info.openrouter_model
+        const shortName = raw
+          .replace(/^[^/]+\//, '')       // strip provider prefix "qwen/"
+          .replace(/:free$/, ' (free)')  // ":free" → " (free)"
+          .replace(/:(\w+)$/, ' ($1)')   // other tags
+          .replace(/[-_]/g, ' ')         // dashes/underscores → spaces
+          .replace(/\b\w/g, c => c.toUpperCase()) // Title Case
+        setModels([
+          ...MODELS_STATIC,
+          { value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` },
+        ])
+      }
+    }).catch(() => {})
   }, [])
 
   async function loadRecentJobs() {
@@ -570,7 +590,7 @@ export default function FullReport() {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Model AI</label>
             <div className="space-y-1 mb-2">
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <label key={m.value} className="flex items-center gap-2 cursor-pointer text-sm">
                   <input type="radio" name="model" value={m.value}
                     checked={model === m.value} onChange={() => setModel(m.value)}

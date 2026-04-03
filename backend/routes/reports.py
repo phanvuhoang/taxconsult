@@ -16,7 +16,7 @@ from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
 from backend.models import Report, ReportJob, User
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
-from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS
+from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_API_KEY
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -43,6 +43,14 @@ class GammaRequest(BaseModel):
 
 
 # ── List / Get / Delete (unchanged) ──────────────────────────────────────────
+
+@router.get("/model-info")
+async def get_model_info(user: User = Depends(get_current_user)):
+    """Trả về thông tin model động từ env vars — frontend dùng để hiển thị tên."""
+    return {
+        "openrouter_model": OPENROUTER_MODEL if OPENROUTER_API_KEY else None,
+    }
+
 
 @router.get("")
 async def list_reports(
