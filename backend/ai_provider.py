@@ -30,13 +30,16 @@ async def call_ai(
         result = await _call_deepseek(messages, system, model, max_tokens)
         if result:
             return result
+        # DeepSeek failed → fall through to Claudible
 
-    # Route: OpenRouter (Qwen and others)
+    # Route: OpenRouter (Qwen and others) — NO fallback nếu key có mà call fail
     if tier == "qwen" or "openrouter" in model or (model and model.startswith("qwen/")):
-        if OPENROUTER_API_KEY:
-            result = await _call_openrouter(messages, system, model, max_tokens)
-            if result:
-                return result
+        if not OPENROUTER_API_KEY:
+            raise RuntimeError("OPENROUTER_API_KEY chưa được cấu hình")
+        result = await _call_openrouter(messages, system, model, max_tokens)
+        if result:
+            return result
+        raise RuntimeError(f"OpenRouter gọi thất bại cho model {model} — kiểm tra OPENROUTER_API_KEY và tên model")
 
     # Route: Claudible (Haiku / Sonnet)
     if CLAUDIBLE_API_KEY:
@@ -72,12 +75,14 @@ async def stream_ai(
             async for chunk in _stream_deepseek(messages, system, model, max_tokens):
                 yield chunk
             return
+        # DeepSeek key missing → fall through
 
     if tier == "qwen" or (model and model.startswith("qwen/")):
-        if OPENROUTER_API_KEY:
-            async for chunk in _stream_openrouter(messages, system, model, max_tokens):
-                yield chunk
-            return
+        if not OPENROUTER_API_KEY:
+            raise RuntimeError("OPENROUTER_API_KEY chưa được cấu hình")
+        async for chunk in _stream_openrouter(messages, system, model, max_tokens):
+            yield chunk
+        return
 
     if CLAUDIBLE_API_KEY:
         async for chunk in _stream_claudible(messages, system, model, max_tokens):
@@ -263,7 +268,7 @@ async def _call_openrouter(messages, system, model, max_tokens) -> Optional[dict
 
 async def _stream_openrouter(messages, system, model, max_tokens) -> AsyncGenerator[str, None]:
     if not OPENROUTER_API_KEY:
-        return
+        raise RuntimeError("OPENROUTER_API_KEY not set")
     oai_messages = []
     if system:
         oai_messages.append({"role": "system", "content": system})
@@ -301,7 +306,7 @@ async def _stream_openrouter(messages, system, model, max_tokens) -> AsyncGenera
                         except Exception:
                             pass
     except Exception as e:
-        print(f"OpenRouter stream {model} error: {e}")
+        raise RuntimeError(f"OpenRouter stream error ({model}): {e}")
 
 
 # ── Anthropic direct (fallback, paid) ─────────────────────────────
