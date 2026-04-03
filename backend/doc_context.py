@@ -20,6 +20,8 @@ SAC_THUE_MAP = {
     "HKD": ["HKD"],
     "QLT": ["QLT"],
     "XNK": ["XNK"],
+    "HOA_DON": ["HOA_DON"],
+    "THUE_QT": ["THUE_QT"],
 }
 
 MAX_DOC_CHARS = 15000

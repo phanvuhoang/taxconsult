@@ -136,6 +136,14 @@ export const api = {
   suggestSubsections: (data) => request('POST', '/reports/suggest-subsections', data),
   createGamma: (data) => request('POST', '/reports/gamma', data),
 
+  // Content jobs
+  startContent: (data) => request('POST', '/content/start', data),
+  getContentJob: (jobId) => request('GET', `/content/job/${jobId}`),
+  cancelContentJob: (jobId) => request('POST', `/content/job/${jobId}/cancel`),
+  getContentHistory: (contentType) => request('GET', `/content/history?content_type=${contentType}`),
+  requestContentGamma: (jobId, numSlides) => request('POST', `/content/job/${jobId}/gamma`, { num_slides: numSlides }),
+  exportContentDocx: (jobId) => requestBlob('GET', `/content/job/${jobId}/export-docx`),
+
   // Tax Docs — dbvntax browse
   browseDbvntax: (sac_thue, loai) => {
     const params = new URLSearchParams({ sac_thue })

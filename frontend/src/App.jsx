@@ -7,6 +7,10 @@ import FullReport from './pages/FullReport.jsx'
 import Reports from './pages/Reports.jsx'
 import TaxDocs from './pages/TaxDocs.jsx'
 import Settings from './pages/Settings.jsx'
+import Scenario from './pages/Scenario.jsx'
+import Analysis from './pages/Analysis.jsx'
+import PressArticle from './pages/PressArticle.jsx'
+import TaxAdvice from './pages/TaxAdvice.jsx'
 
 function RequireAuth({ children }) {
   const token = localStorage.getItem('token')
@@ -33,6 +37,10 @@ export default function App() {
           <Route path="reports" element={<Reports />} />
           <Route path="tax-docs" element={<TaxDocs />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="scenario" element={<Scenario />} />
+          <Route path="analysis" element={<Analysis />} />
+          <Route path="press-article" element={<PressArticle />} />
+          <Route path="tax-advice" element={<TaxAdvice />} />
         </Route>
       </Routes>
     </BrowserRouter>

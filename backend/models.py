@@ -123,6 +123,42 @@ class ReportJob(Base):
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ContentJob(Base):
+    __tablename__ = "content_jobs"
+
+    id = Column(String(36), primary_key=True)  # UUID
+    user_id = Column(Integer, ForeignKey("users.id"))
+    content_type = Column(String(20), nullable=False)
+    # content_type values: 'scenario' | 'analysis' | 'press' | 'advice'
+
+    # Input fields
+    subject = Column(Text, nullable=False)
+    tax_types = Column(ARRAY(Text), default=list)
+    time_period = Column(String(100))
+    model_tier = Column(String(30), default="deepseek")
+    client_name = Column(String(200))
+    company_name = Column(String(200))
+    style_refs = Column(JSONB, default=list)
+
+    # Output
+    status = Column(String(20), default="pending")
+    content_html = Column(Text)
+    citations = Column(JSONB, default=list)
+    error_msg = Column(Text)
+    progress_step = Column(Integer, default=0)
+    progress_total = Column(Integer, default=3)
+    progress_label = Column(String(200))
+
+    # Gamma
+    gamma_url = Column(Text)
+    gamma_status = Column(String(20))
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    user = relationship("User")
+
+
 class ResearchSession(Base):
     __tablename__ = "research_sessions"
 
