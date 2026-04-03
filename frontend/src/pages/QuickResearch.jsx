@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import PeriodSelector from '../components/PeriodSelector.jsx'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD']
-const MODELS = [
+const MODELS_STATIC = [
   { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
   { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
   { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
@@ -14,6 +14,7 @@ export default function QuickResearch() {
   const [taxTypes, setTaxTypes] = useState(['TNDN'])
   const [period, setPeriod] = useState('hiện_nay')
   const [model, setModel] = useState('deepseek')
+  const [models, setModels] = useState(MODELS_STATIC)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -23,6 +24,22 @@ export default function QuickResearch() {
 
   useEffect(() => {
     loadHistory()
+    // Fetch dynamic model info (OpenRouter model từ env)
+    api.getModelInfo().then((info) => {
+      if (info?.openrouter_model) {
+        const raw = info.openrouter_model
+        const shortName = raw
+          .replace(/^[^/]+\//, '')
+          .replace(/:free$/, ' (free)')
+          .replace(/:(\w+)$/, ' ($1)')
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase())
+        setModels([
+          ...MODELS_STATIC,
+          { value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` },
+        ])
+      }
+    }).catch(() => {})
   }, [])
 
   async function loadHistory() {
@@ -178,7 +195,7 @@ export default function QuickResearch() {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Model</label>
             <div className="space-y-1">
-              {MODELS.map((m) => (
+              {models.map((m) => (
                 <label key={m.value} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
