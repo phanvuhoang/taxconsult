@@ -14,9 +14,41 @@ from backend.routes import auth, reports, research, tax_docs, admin, priority_do
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from sqlalchemy import text
     # Create tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Auto-migrate new columns (safe — IF NOT EXISTS)
+        await conn.execute(text("""
+            ALTER TABLE content_jobs
+                ADD COLUMN IF NOT EXISTS model_used VARCHAR(100),
+                ADD COLUMN IF NOT EXISTS provider_used VARCHAR(50);
+        """))
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS reference_articles (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                title VARCHAR(500) NOT NULL,
+                source_url TEXT,
+                source_type VARCHAR(20) NOT NULL DEFAULT 'paste',
+                content_text TEXT,
+                content_html TEXT,
+                char_count INTEGER DEFAULT 0,
+                tax_types TEXT[] DEFAULT '{}',
+                form_type VARCHAR(50),
+                tags TEXT[] DEFAULT '{}',
+                auto_classified BOOLEAN DEFAULT FALSE,
+                gamma_url TEXT,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            );
+        """))
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_ref_articles_user ON reference_articles(user_id);
+        """))
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_ref_articles_form_type ON reference_articles(form_type);
+        """))
 
     # Create admin user if no users exist
     async with AsyncSessionLocal() as db:

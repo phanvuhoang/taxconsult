@@ -9,6 +9,7 @@ from backend.config import (
     OPENROUTER_API_KEY,
     MODEL_MAP, DEFAULT_MODEL_TIER,
 )
+# qwen2 cũng route qua OpenRouter — dùng cùng _call_openrouter
 
 
 def resolve_model(model_tier: str) -> str:
@@ -33,7 +34,7 @@ async def call_ai(
         # DeepSeek failed → fall through to Claudible
 
     # Route: OpenRouter (Qwen and others) — NO fallback nếu key có mà call fail
-    if tier == "qwen" or "openrouter" in model or (model and model.startswith("qwen/")):
+    if tier in ("qwen", "qwen2") or "openrouter" in model or (model and "/" in model and not model.startswith("claude")):
         if not OPENROUTER_API_KEY:
             raise RuntimeError("OPENROUTER_API_KEY chưa được cấu hình")
         result = await _call_openrouter(messages, system, model, max_tokens)
@@ -77,7 +78,7 @@ async def stream_ai(
             return
         # DeepSeek key missing → fall through
 
-    if tier == "qwen" or (model and model.startswith("qwen/")):
+    if tier in ("qwen", "qwen2") or (model and "/" in model and not model.startswith("claude")):
         if not OPENROUTER_API_KEY:
             raise RuntimeError("OPENROUTER_API_KEY chưa được cấu hình")
         async for chunk in _stream_openrouter(messages, system, model, max_tokens):

@@ -54,14 +54,18 @@ export default function Reports() {
 
   async function viewItem(item) {
     try {
-      let data
+      let content_html = ''
       if (item.source === 'report') {
-        data = await api.getReport(Number(item.id))
-        setSelected({ ...item, content_html: data.content_html })
+        const data = await api.getReport(Number(item.id))
+        content_html = data.content_html || ''
+      } else if (item.source === 'research') {
+        const data = await api.getResearchById(Number(item.id))
+        content_html = data.answer_html || ''
       } else {
-        data = await api.getContentJob(item.id)
-        setSelected({ ...item, content_html: data.content_html })
+        const data = await api.getContentJob(item.id)
+        content_html = data.content_html || ''
       }
+      setSelected({ ...item, content_html })
     } catch (_) {}
   }
 

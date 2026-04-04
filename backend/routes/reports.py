@@ -47,8 +47,10 @@ class GammaRequest(BaseModel):
 @router.get("/model-info")
 async def get_model_info(user: User = Depends(get_current_user)):
     """Trả về thông tin model động từ env vars — frontend dùng để hiển thị tên."""
+    from backend.config import OPENROUTER_MODEL2
     return {
         "openrouter_model": OPENROUTER_MODEL if OPENROUTER_API_KEY else None,
+        "openrouter_model2": OPENROUTER_MODEL2 if (OPENROUTER_API_KEY and OPENROUTER_MODEL2) else None,
     }
 
 
@@ -61,13 +63,15 @@ async def list_reports(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.models import ResearchSession
     results = []
 
-    # From reports table (quick research + full reports)
-    if not report_type or report_type in ("quick", "full"):
-        q = select(Report).where(Report.user_id == user.id)
-        if report_type:
-            q = q.where(Report.report_type == report_type)
+    # === Block 1: Full Reports (Report table, report_type='full') ===
+    if not report_type or report_type == "full":
+        q = select(Report).where(
+            Report.user_id == user.id,
+            Report.report_type == "full",
+        )
         if search:
             q = q.where(Report.subject.ilike(f"%{search}%"))
         if tax_type:
@@ -78,7 +82,7 @@ async def list_reports(
             results.append({
                 "id": str(row.id),
                 "source": "report",
-                "report_type": row.report_type,
+                "report_type": "full",
                 "subject": (row.subject or row.title or "")[:100],
                 "tax_types": row.tax_types or [],
                 "model_used": row.model_used or "",
@@ -86,18 +90,36 @@ async def list_reports(
                 "created_at_fmt": row.created_at.strftime("%d/%m/%Y %H:%M") if row.created_at else "",
             })
 
-    # From content_jobs table (scenario, analysis, press, advice)
-    content_type_filter = None
-    if report_type and report_type not in ("quick", "full"):
-        content_type_filter = report_type
+    # === Block 2: Quick Research (ResearchSession table) ===
+    if not report_type or report_type == "quick":
+        q = select(ResearchSession).where(ResearchSession.user_id == user.id)
+        if search:
+            q = q.where(ResearchSession.question.ilike(f"%{search}%"))
+        if tax_type:
+            q = q.where(ResearchSession.tax_types.contains([tax_type]))
+        q = q.order_by(desc(ResearchSession.created_at)).limit(limit)
+        r = await db.execute(q)
+        for row in r.scalars().all():
+            results.append({
+                "id": str(row.id),
+                "source": "research",
+                "report_type": "quick",
+                "subject": (row.question or "")[:100],
+                "tax_types": row.tax_types or [],
+                "model_used": row.model_used or "",
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+                "created_at_fmt": row.created_at.strftime("%d/%m/%Y %H:%M") if row.created_at else "",
+            })
 
-    if not report_type or report_type not in ("quick", "full"):
+    # === Block 3: Content jobs (scenario, analysis, press, advice) ===
+    content_types_target = ["scenario", "analysis", "press", "advice"]
+    if not report_type or report_type in content_types_target:
         q = select(ContentJob).where(
             ContentJob.user_id == user.id,
             ContentJob.status == "done",
         )
-        if content_type_filter:
-            q = q.where(ContentJob.content_type == content_type_filter)
+        if report_type and report_type in content_types_target:
+            q = q.where(ContentJob.content_type == report_type)
         if search:
             q = q.where(ContentJob.subject.ilike(f"%{search}%"))
         if tax_type:

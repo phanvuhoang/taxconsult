@@ -48,10 +48,10 @@ export default function Dashboard() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Người dùng', value: stats.total_users, icon: '👤' },
-            { label: 'Báo cáo', value: stats.total_reports, icon: '📊' },
             { label: 'Quick Research', value: stats.total_research_sessions, icon: '🔍' },
-            { label: 'Tax Docs', value: stats.total_tax_docs, icon: '📚' },
+            { label: 'Full Report', value: stats.total_reports, icon: '📊' },
+            { label: 'Nội dung AI', value: stats.total_content_jobs ?? 0, icon: '✍️' },
+            { label: 'Văn bản pháp luật', value: stats.total_tax_docs, icon: '📚' },
           ].map((s) => (
             <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 text-center">
               <div className="text-2xl">{s.icon}</div>

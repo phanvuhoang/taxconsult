@@ -207,19 +207,23 @@ export default function FullReport() {
   // Fetch dynamic model info from backend (env-driven)
   useEffect(() => {
     api.getModelInfo().then((info) => {
+      const extra = []
+      const fmtName = (raw) => raw
+        .replace(/^[^/]+\//, '')
+        .replace(/:free$/, ' (free)')
+        .replace(/:(\w+)$/, ' ($1)')
+        .replace(/[-_]/g, ' ')
+        .replace(/\b\w/g, c => c.toUpperCase())
       if (info?.openrouter_model) {
-        // Extract a friendly display name: "qwen/qwen3.6-plus:free" → "Qwen3.6 Plus (free)"
         const raw = info.openrouter_model
-        const shortName = raw
-          .replace(/^[^/]+\//, '')       // strip provider prefix "qwen/"
-          .replace(/:free$/, ' (free)')  // ":free" → " (free)"
-          .replace(/:(\w+)$/, ' ($1)')   // other tags
-          .replace(/[-_]/g, ' ')         // dashes/underscores → spaces
-          .replace(/\b\w/g, c => c.toUpperCase()) // Title Case
-        setModels([
-          ...MODELS_STATIC,
-          { value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` },
-        ])
+        extra.push({ value: 'qwen', label: `🌟 ${fmtName(raw)}`, desc: `OpenRouter: ${raw}` })
+      }
+      if (info?.openrouter_model2) {
+        const raw2 = info.openrouter_model2
+        extra.push({ value: 'qwen2', label: `⭐ ${fmtName(raw2)}`, desc: `OpenRouter: ${raw2}` })
+      }
+      if (extra.length > 0) {
+        setModels([...MODELS_STATIC, ...extra])
       }
     }).catch(() => {})
   }, [])

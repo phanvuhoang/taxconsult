@@ -100,13 +100,20 @@ async def get_stats(
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.models import ContentJob
     total_users = (await db.execute(select(func.count(User.id)))).scalar()
-    total_reports = (await db.execute(select(func.count(Report.id)))).scalar()
+    total_full_reports = (await db.execute(
+        select(func.count(Report.id)).where(Report.report_type == "full")
+    )).scalar()
     total_research = (await db.execute(select(func.count(ResearchSession.id)))).scalar()
+    total_content = (await db.execute(
+        select(func.count(ContentJob.id)).where(ContentJob.status == "done")
+    )).scalar()
     total_docs = (await db.execute(select(func.count(TaxDoc.id)))).scalar()
     return {
         "total_users": total_users,
-        "total_reports": total_reports,
+        "total_reports": total_full_reports,
         "total_research_sessions": total_research,
+        "total_content_jobs": total_content,
         "total_tax_docs": total_docs,
     }

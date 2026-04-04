@@ -49,6 +49,7 @@ export default function ContentPage({
   useEffect(() => {
     loadHistory()
     api.getModelInfo().then((info) => {
+      const extra = []
       if (info?.openrouter_model) {
         const raw = info.openrouter_model
         const shortName = raw
@@ -57,10 +58,20 @@ export default function ContentPage({
           .replace(/:(\w+)$/, ' ($1)')
           .replace(/[-_]/g, ' ')
           .replace(/\b\w/g, c => c.toUpperCase())
-        setModels([
-          ...MODELS_STATIC,
-          { value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` },
-        ])
+        extra.push({ value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` })
+      }
+      if (info?.openrouter_model2) {
+        const raw2 = info.openrouter_model2
+        const shortName2 = raw2
+          .replace(/^[^/]+\//, '')
+          .replace(/:free$/, ' (free)')
+          .replace(/:(\w+)$/, ' ($1)')
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, c => c.toUpperCase())
+        extra.push({ value: 'qwen2', label: `⭐ ${shortName2}`, desc: `OpenRouter: ${raw2}` })
+      }
+      if (extra.length > 0) {
+        setModels([...MODELS_STATIC, ...extra])
       }
     }).catch(() => {})
   }, [contentType])
