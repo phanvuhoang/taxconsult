@@ -62,6 +62,15 @@ BÀI MẪU THAM KHẢO PHONG CÁCH
 {style_ctx}
 """
 
+    HTML_RULES = """
+HTML FORMATTING RULES (BẮT BUỘC tuân theo):
+- Mỗi đoạn văn: bọc trong <p>...</p>
+- Danh sách: dùng <ul><li>...</li></ul> hoặc <ol><li>...</li></ol>
+- KHÔNG viết "- item" hay "• item" dạng plain text
+- Mỗi <li> phải là câu/đoạn đầy đủ ý nghĩa, không dùng fragment
+- Sau mỗi <h2> hoặc <h3> phải có <p> hoặc <ul> ngay
+"""
+
     if content_type == "scenario":
         return base + f"""
 ════════════════════════════════════════
@@ -76,7 +85,7 @@ Output HTML. Cấu trúc:
 <h2>3. Hướng xử lý</h2>
 <h2>4. Lưu ý quan trọng</h2>
 Tối thiểu 600 từ. Không bịa số hiệu văn bản.
-"""
+{HTML_RULES}"""
     elif content_type == "analysis":
         return base + f"""
 ════════════════════════════════════════
@@ -92,7 +101,7 @@ Output HTML. Cấu trúc:
 <h2>IV. Lưu ý quan trọng</h2>
 <h2>V. Kết luận</h2>
 Tối thiểu 1200 từ.
-"""
+{HTML_RULES}"""
     elif content_type == "press":
         return base + f"""
 ════════════════════════════════════════
@@ -107,7 +116,7 @@ Output HTML. Cấu trúc:
 <h2>[Phần 2 — ví dụ, số liệu]</h2>
 <h2>Kết luận & Khuyến nghị</h2>
 800-1500 từ. Giọng thân thiện, không hàn lâm.
-"""
+{HTML_RULES}"""
     elif content_type == "advice":
         addressee = client_name or "Quý khách hàng"
         if company_name:
@@ -127,8 +136,8 @@ Output HTML. Cấu trúc:
 <h2>IV. Khuyến nghị</h2>
 <p><em>Lưu ý: Thư tư vấn dựa trên quy định pháp luật hiện hành...</em></p>
 1-2 trang A4 (600-1000 từ), giọng văn chuyên nghiệp.
-"""
-    return base + f"\nYêu cầu: {subject}\nOutput HTML."
+{HTML_RULES}"""
+    return base + f"\nYêu cầu: {subject}\nOutput HTML.\n{HTML_RULES}"
 
 
 async def run_content_job(
@@ -148,7 +157,8 @@ async def run_content_job(
     async with AsyncSessionLocal() as db:
         async with DbvntaxSession() as dbvntax_db:
 
-            async def _update(step, total, label, status="running", html=None, error=None, citations=None):
+            async def _update(step, total, label, status="running", html=None, error=None,
+                              citations=None, model_used=None, provider_used=None):
                 job = await db.get(ContentJob, job_id)
                 if not job:
                     return
@@ -162,6 +172,10 @@ async def run_content_job(
                     job.error_msg = error
                 if citations is not None:
                     job.citations = citations
+                if model_used is not None:
+                    job.model_used = model_used
+                if provider_used is not None:
+                    job.provider_used = provider_used
                 await db.commit()
 
             try:
@@ -204,7 +218,11 @@ async def run_content_job(
                     html = re.sub(r'^```html?\n?', '', html)
                     html = re.sub(r'\n?```$', '', html)
 
-                await _update(3, 3, "Hoàn thành!", status="done", html=html, citations=citations)
+                model_used_str = result.get("model_used", model_tier)
+                provider_used_str = result.get("provider_used", "")
+
+                await _update(3, 3, "Hoàn thành!", status="done", html=html, citations=citations,
+                              model_used=model_used_str, provider_used=provider_used_str)
 
             except Exception as e:
                 await _update(0, 3, "", status="error", error=str(e))

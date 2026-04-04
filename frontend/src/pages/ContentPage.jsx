@@ -28,7 +28,7 @@ export default function ContentPage({
   const [styleInput, setStyleInput] = useState('')
   const [numSlides, setNumSlides] = useState(defaultSlides)
 
-  const [status, setStatus] = useState('idle') // idle|loading|polling|done|error
+  const [status, setStatus] = useState('idle')
   const [jobId, setJobId] = useState(null)
   const [progress, setProgress] = useState({ step: 0, total: 3, label: '' })
   const [contentHtml, setContentHtml] = useState('')
@@ -36,11 +36,15 @@ export default function ContentPage({
   const [gammaUrl, setGammaUrl] = useState('')
   const [gammaLoading, setGammaLoading] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [modelUsed, setModelUsed] = useState('')
 
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyTaxFilter, setHistoryTaxFilter] = useState('')
 
   const pollRef = useRef(null)
+  const searchDebounceRef = useRef(null)
 
   useEffect(() => {
     loadHistory()
@@ -62,19 +66,35 @@ export default function ContentPage({
   }, [contentType])
 
   useEffect(() => {
-    return () => { if (pollRef.current) clearInterval(pollRef.current) }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current)
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    }
   }, [])
 
-  async function loadHistory() {
+  async function loadHistory(taxFilter = historyTaxFilter, searchTerm = historySearch) {
     try {
-      const data = await api.getContentHistory(contentType)
+      const params = {}
+      if (taxFilter) params.tax_type = taxFilter
+      if (searchTerm) params.search = searchTerm
+      const data = await api.getContentHistory(contentType, params)
       setHistory(data)
-      // Auto-resume running job
       const running = data.find(j => j.status === 'running' || j.status === 'pending')
       if (running && status === 'idle') {
         startPolling(running.id)
       }
     } catch (_) {}
+  }
+
+  function onSearchChange(val) {
+    setHistorySearch(val)
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current)
+    searchDebounceRef.current = setTimeout(() => loadHistory(historyTaxFilter, val), 400)
+  }
+
+  function onTaxFilterChange(val) {
+    setHistoryTaxFilter(val)
+    loadHistory(val, historySearch)
   }
 
   function startPolling(id) {
@@ -90,6 +110,7 @@ export default function ContentPage({
         if (data.status === 'done') {
           clearInterval(pollRef.current)
           pollRef.current = null
+          if (data.model_used) setModelUsed(data.model_used)
           setStatus('done')
           loadHistory()
         } else if (data.status === 'error') {
@@ -119,6 +140,7 @@ export default function ContentPage({
     setError('')
     setContentHtml('')
     setGammaUrl('')
+    setModelUsed('')
     setStatus('loading')
 
     try {
@@ -180,6 +202,7 @@ export default function ContentPage({
       const data = await api.getContentJob(id)
       setContentHtml(data.content_html || '')
       setGammaUrl(data.gamma_url || '')
+      setModelUsed(data.model_used || '')
       setJobId(id)
       setStatus('done')
       setShowHistory(false)
@@ -206,20 +229,43 @@ export default function ContentPage({
           📂 Lịch sử ({history.length})
         </button>
         {showHistory && (
-          <div className="mt-2 border border-gray-200 rounded-lg divide-y max-h-60 overflow-y-auto bg-white shadow-sm">
-            {history.length === 0 && (
-              <div className="p-3 text-gray-400 text-center text-sm">Chưa có lịch sử</div>
-            )}
-            {history.map((h) => (
-              <div
-                key={h.id}
-                className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
-                onClick={() => loadFromHistory(h.id)}
+          <div className="mt-2 border border-gray-200 rounded-lg bg-white shadow-sm">
+            {/* Filter bar */}
+            <div className="flex gap-2 p-2 border-b border-gray-100">
+              <input
+                type="text"
+                value={historySearch}
+                onChange={e => onSearchChange(e.target.value)}
+                placeholder="Tìm theo chủ đề..."
+                className="flex-1 border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-brand"
+              />
+              <select
+                value={historyTaxFilter}
+                onChange={e => onTaxFilterChange(e.target.value)}
+                className="border border-gray-200 rounded px-2 py-1 text-xs focus:outline-none"
               >
-                <span className="flex-1 truncate text-brand">{h.subject}</span>
-                <span className="text-gray-400 text-xs shrink-0">{h.created_at}</span>
-              </div>
-            ))}
+                <option value="">Tất cả thuế</option>
+                {TAX_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div className="max-h-72 overflow-y-auto divide-y">
+              {history.length === 0 && (
+                <div className="p-4 text-center text-gray-400 text-sm">Không tìm thấy</div>
+              )}
+              {history.map((h) => (
+                <div
+                  key={h.id}
+                  className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                  onClick={() => loadFromHistory(h.id)}
+                >
+                  <span className="flex-1 truncate text-brand">{h.subject}</span>
+                  {h.model_used && (
+                    <span className="text-gray-300 text-xs shrink-0">{h.model_used}</span>
+                  )}
+                  <span className="text-gray-400 text-xs shrink-0">{h.created_at}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -397,6 +443,11 @@ export default function ContentPage({
           {/* Toolbar */}
           <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
             <span className="text-green-600 font-medium text-sm">✅ Hoàn thành</span>
+            {modelUsed && (
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                🤖 {modelUsed}
+              </span>
+            )}
             <div className="flex gap-2 flex-wrap ml-auto">
               <button
                 onClick={() => navigator.clipboard.writeText(contentHtml)}

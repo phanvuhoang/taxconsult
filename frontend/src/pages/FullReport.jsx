@@ -18,11 +18,11 @@ const MODELS_STATIC = [
 const DEFAULT_SECTIONS = [
   { id: 's1', title: 'Tổng quan về ngành/doanh nghiệp', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
   { id: 's2', title: 'Đặc thù kinh doanh', enabled: true, tax_aware: false, sub: ['Chuỗi cung ứng', 'Working capital cycle', 'Đặc điểm tài sản'] },
-  { id: 's3', title: 'Các quy định pháp lý', enabled: true, tax_aware: true, sub: ['Luật chuyên ngành', 'Điều kiện kinh doanh', 'Hạn chế FDI'] },
+  { id: 's3', title: 'Các quy định pháp lý', enabled: true, tax_aware: false, sub: ['Luật chuyên ngành', 'Điều kiện kinh doanh', 'Hạn chế FDI'] },
   { id: 's4', title: 'Phân tích các loại thuế áp dụng', enabled: true, tax_aware: true, sub: ['Thuế TNDN', 'Thuế GTGT', 'Thuế Nhà thầu', 'Thuế TTĐB', 'Thuế XNK'] },
   { id: 's5', title: 'Các vấn đề thuế đặc thù', enabled: true, tax_aware: true, sub: ['Rủi ro doanh thu/chi phí', 'Chuyển giá', 'Ưu đãi thuế', 'Hóa đơn đặc thù', 'Tranh chấp thuế'] },
-  { id: 's6', title: 'Thông lệ thuế quốc tế', enabled: true, tax_aware: true, sub: ['BEPS', 'Chuyển giá quốc tế', 'So sánh khu vực', 'Hiệp định thuế'] },
-  { id: 's7', title: 'Khuyến nghị & Kết luận', enabled: true, tax_aware: true, sub: ['Tối ưu hóa thuế', 'Tuân thủ', 'Cơ hội ưu đãi', 'Rủi ro cần theo dõi'] },
+  { id: 's6', title: 'Thông lệ thuế quốc tế', enabled: true, tax_aware: false, sub: ['BEPS', 'Chuyển giá quốc tế', 'So sánh khu vực', 'Hiệp định thuế'] },
+  { id: 's7', title: 'Khuyến nghị & Kết luận', enabled: true, tax_aware: false, sub: ['Tối ưu hóa thuế', 'Tuân thủ', 'Cơ hội ưu đãi', 'Rủi ro cần theo dõi'] },
 ]
 const POLL_INTERVAL = 3000
 

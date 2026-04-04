@@ -13,7 +13,7 @@ from sqlalchemy import select, desc
 from typing import Optional, List
 
 from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
-from backend.models import Report, ReportJob, User
+from backend.models import Report, ReportJob, User, ContentJob
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
 from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_API_KEY
@@ -54,34 +54,70 @@ async def get_model_info(user: User = Depends(get_current_user)):
 
 @router.get("")
 async def list_reports(
-    report_type: str = Query(None),
-    skip: int = 0,
-    limit: int = 20,
+    report_type: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    tax_type: Optional[str] = Query(None),
+    limit: int = Query(50),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(Report).order_by(desc(Report.created_at))
-    if user.role != "admin":
-        q = q.where(Report.user_id == user.id)
-    if report_type:
-        q = q.where(Report.report_type == report_type)
-    q = q.offset(skip).limit(limit)
-    result = await db.execute(q)
-    reports = result.scalars().all()
-    return [
-        {
-            "id": r.id,
-            "title": r.title,
-            "subject": r.subject,
-            "report_type": r.report_type,
-            "tax_types": r.tax_types,
-            "time_period": r.time_period,
-            "model_used": r.model_used,
-            "duration_ms": r.duration_ms,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        }
-        for r in reports
-    ]
+    results = []
+
+    # From reports table (quick research + full reports)
+    if not report_type or report_type in ("quick", "full"):
+        q = select(Report).where(Report.user_id == user.id)
+        if report_type:
+            q = q.where(Report.report_type == report_type)
+        if search:
+            q = q.where(Report.subject.ilike(f"%{search}%"))
+        if tax_type:
+            q = q.where(Report.tax_types.contains([tax_type]))
+        q = q.order_by(desc(Report.created_at)).limit(limit)
+        r = await db.execute(q)
+        for row in r.scalars().all():
+            results.append({
+                "id": str(row.id),
+                "source": "report",
+                "report_type": row.report_type,
+                "subject": (row.subject or row.title or "")[:100],
+                "tax_types": row.tax_types or [],
+                "model_used": row.model_used or "",
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+                "created_at_fmt": row.created_at.strftime("%d/%m/%Y %H:%M") if row.created_at else "",
+            })
+
+    # From content_jobs table (scenario, analysis, press, advice)
+    content_type_filter = None
+    if report_type and report_type not in ("quick", "full"):
+        content_type_filter = report_type
+
+    if not report_type or report_type not in ("quick", "full"):
+        q = select(ContentJob).where(
+            ContentJob.user_id == user.id,
+            ContentJob.status == "done",
+        )
+        if content_type_filter:
+            q = q.where(ContentJob.content_type == content_type_filter)
+        if search:
+            q = q.where(ContentJob.subject.ilike(f"%{search}%"))
+        if tax_type:
+            q = q.where(ContentJob.tax_types.contains([tax_type]))
+        q = q.order_by(desc(ContentJob.created_at)).limit(limit)
+        r = await db.execute(q)
+        for row in r.scalars().all():
+            results.append({
+                "id": row.id,
+                "source": "content",
+                "report_type": row.content_type,
+                "subject": row.subject[:100],
+                "tax_types": row.tax_types or [],
+                "model_used": row.model_used or "",
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+                "created_at_fmt": row.created_at.strftime("%d/%m/%Y %H:%M") if row.created_at else "",
+            })
+
+    results.sort(key=lambda x: x["created_at"], reverse=True)
+    return results[:limit]
 
 
 @router.post("/job/{job_id}/cancel")
@@ -305,20 +341,17 @@ async def export_slides(
     )
 
 
-@router.post("/gamma")
-async def create_gamma(
-    body: GammaRequest,
-    user: User = Depends(get_current_user),
-):
-    """Tạo Gamma presentation từ report HTML."""
+async def _create_gamma_presentation(title: str, html_content: str, num_cards: int = 10) -> str:
+    """Tạo Gamma presentation và trả về URL. Dùng chung cho reports + content jobs."""
     import os
     import httpx as _httpx
+    from backend.doc_context import strip_html_tvpl
+
     gamma_key = os.getenv("GAMMA_API_KEY", "")
     if not gamma_key:
-        raise HTTPException(status_code=400, detail="GAMMA_API_KEY not configured")
+        raise ValueError("GAMMA_API_KEY not configured")
 
-    from backend.doc_context import strip_html_tvpl
-    text_content = strip_html_tvpl(body.html_content)
+    text_content = strip_html_tvpl(html_content)
 
     async with _httpx.AsyncClient(timeout=60) as client:
         r = await client.post(
@@ -328,19 +361,35 @@ async def create_gamma(
                 "Content-Type": "application/json",
             },
             json={
-                "title": f"Phân tích thuế: {body.subject}",
+                "title": title,
                 "text": text_content[:8000],
-                "num_cards": min(body.num_cards, 60),
+                "num_cards": min(num_cards, 60),
                 "theme": "professional",
                 "language": "vi",
             },
         )
-        try:
-            r.raise_for_status()
-        except Exception:
-            raise HTTPException(status_code=502, detail=f"Gamma API error: {r.text[:200]}")
+        r.raise_for_status()
         data = r.json()
-        return {"url": data.get("url"), "id": data.get("id")}
+        return data.get("url") or data.get("id") or ""
+
+
+@router.post("/gamma")
+async def create_gamma(
+    body: GammaRequest,
+    user: User = Depends(get_current_user),
+):
+    """Tạo Gamma presentation từ report HTML."""
+    try:
+        url = await _create_gamma_presentation(
+            title=f"Phân tích thuế: {body.subject}",
+            html_content=body.html_content,
+            num_cards=body.num_cards,
+        )
+        return {"url": url}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Gamma API error: {str(e)[:200]}")
 
 
 @router.post("/suggest-subsections")

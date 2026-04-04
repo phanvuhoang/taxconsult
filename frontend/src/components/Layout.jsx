@@ -20,13 +20,14 @@ const NAV = [
   { to: '/', label: 'Dashboard', icon: '🏠', exact: true },
   { to: '/quick-research', label: 'Quick Research', icon: '🔍' },
   { to: '/full-report', label: 'Full Report', icon: '📊' },
-  { to: '/reports', label: 'Lịch sử', icon: '📁' },
   { to: '/scenario', label: 'Tình huống Thuế', icon: '🎯' },
   { to: '/analysis', label: 'Bài Phân tích', icon: '📝' },
   { to: '/press-article', label: 'Bài Viết Báo', icon: '📰' },
   { to: '/tax-advice', label: 'Thư Tư vấn', icon: '✉️' },
+  { to: '/references', label: 'Bài tham khảo', icon: '📎' },
   { to: '/tax-docs', label: 'Văn bản', icon: '📚', adminOnly: true },
   { to: '/settings', label: 'Cài đặt', icon: '⚙️' },
+  { to: '/reports', label: 'Lịch sử', icon: '📁' },
 ]
 
 export default function Layout() {

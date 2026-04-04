@@ -11,6 +11,7 @@ import Scenario from './pages/Scenario.jsx'
 import Analysis from './pages/Analysis.jsx'
 import PressArticle from './pages/PressArticle.jsx'
 import TaxAdvice from './pages/TaxAdvice.jsx'
+import References from './pages/References.jsx'
 
 function RequireAuth({ children }) {
   const token = localStorage.getItem('token')
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="analysis" element={<Analysis />} />
           <Route path="press-article" element={<PressArticle />} />
           <Route path="tax-advice" element={<TaxAdvice />} />
+          <Route path="references" element={<References />} />
         </Route>
       </Routes>
     </BrowserRouter>

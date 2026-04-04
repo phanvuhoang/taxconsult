@@ -9,12 +9,12 @@ body {
 
 /* Tax report HTML output styling */
 .report-content h1 { @apply text-2xl font-bold mt-6 mb-3 text-gray-900; }
-.report-content h2 { @apply text-xl font-bold mt-6 mb-3 text-brand border-l-4 border-brand pl-3; }
-.report-content h3 { @apply text-lg font-semibold mt-4 mb-2 text-gray-800; }
-.report-content p  { @apply mb-3 leading-relaxed; }
-.report-content ul { @apply list-disc ml-5 mb-3 space-y-1; }
-.report-content ol { @apply list-decimal ml-5 mb-3 space-y-1; }
-.report-content li { @apply leading-relaxed; }
+.report-content h2 { @apply text-xl font-bold text-brand border-l-4 border-brand pl-3; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+.report-content h3 { @apply text-lg font-semibold text-gray-800; margin-top: 1.25rem; margin-bottom: 0.5rem; }
+.report-content p  { margin-bottom: 0.75rem; line-height: 1.65; }
+.report-content ul { list-style-type: disc; padding-left: 1.5rem; margin: 0.75rem 0; }
+.report-content ol { list-style-type: decimal; padding-left: 1.5rem; margin: 0.75rem 0; }
+.report-content li { margin-bottom: 0.5rem; line-height: 1.65; }
 .report-content table { @apply w-full border-collapse mb-4 text-sm; }
 .report-content th { @apply bg-brand text-white px-3 py-2 text-left border border-gray-300; }
 .report-content td { @apply px-3 py-2 border border-gray-300; }

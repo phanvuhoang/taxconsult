@@ -149,6 +149,10 @@ class ContentJob(Base):
     progress_total = Column(Integer, default=3)
     progress_label = Column(String(200))
 
+    # AI model tracking
+    model_used = Column(String(100))
+    provider_used = Column(String(50))
+
     # Gamma
     gamma_url = Column(Text)
     gamma_status = Column(String(20))
@@ -157,6 +161,39 @@ class ContentJob(Base):
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     user = relationship("User")
+
+
+class ReferenceArticle(Base):
+    __tablename__ = "reference_articles"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Metadata
+    title = Column(String(500), nullable=False)
+    source_url = Column(Text, nullable=True)
+    source_type = Column(String(20), nullable=False, default="paste")
+    # source_type: "url" | "paste" | "upload"
+
+    # Content
+    content_text = Column(Text)
+    content_html = Column(Text)
+    char_count = Column(Integer, default=0)
+
+    # Classification
+    tax_types = Column(ARRAY(Text), default=list)
+    form_type = Column(String(50))
+    # form_type: "quick_research" | "full_report" | "analysis" | "press" | "scenario" | "advice" | "other"
+    tags = Column(ARRAY(Text), default=list)
+
+    # Auto-classify flag
+    auto_classified = Column(Boolean, default=False)
+
+    # Gamma
+    gamma_url = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class ResearchSession(Base):

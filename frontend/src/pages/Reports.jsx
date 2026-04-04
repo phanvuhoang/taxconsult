@@ -1,57 +1,113 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { api } from '../api.js'
 
+const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD', 'QLT', 'HOA_DON', 'THUE_QT']
+const TYPE_LABELS = {
+  quick: '⚡ Quick Research',
+  full: '📊 Full Report',
+  scenario: '🎯 Tình huống',
+  analysis: '📝 Phân tích',
+  press: '📰 Bài báo',
+  advice: '✉️ Tư vấn',
+}
+const TYPE_FILTERS = [
+  { v: '', l: 'Tất cả' },
+  { v: 'quick', l: '⚡ Quick Research' },
+  { v: 'full', l: '📊 Full Report' },
+  { v: 'scenario', l: '🎯 Tình huống' },
+  { v: 'analysis', l: '📝 Phân tích' },
+  { v: 'press', l: '📰 Bài báo' },
+  { v: 'advice', l: '✉️ Tư vấn' },
+]
+
 export default function Reports() {
-  const [reports, setReports] = useState([])
-  const [filter, setFilter] = useState('')
+  const [items, setItems] = useState([])
+  const [filterType, setFilterType] = useState('')
+  const [filterTax, setFilterTax] = useState('')
+  const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [loading, setLoading] = useState(true)
+  const searchRef = useRef(null)
 
   useEffect(() => {
     load()
-  }, [filter])
+  }, [filterType, filterTax])
 
-  async function load() {
+  async function load(searchTerm = search) {
     setLoading(true)
     try {
-      const params = filter ? { report_type: filter } : {}
+      const params = {}
+      if (filterType) params.report_type = filterType
+      if (filterTax) params.tax_type = filterTax
+      if (searchTerm) params.search = searchTerm
       const data = await api.listReports(params)
-      setReports(data)
-    } catch {}
+      setItems(data)
+    } catch (_) {}
     setLoading(false)
   }
 
-  async function viewReport(id) {
-    try {
-      const data = await api.getReport(id)
-      setSelected(data)
-    } catch {}
+  function onSearchChange(val) {
+    setSearch(val)
+    if (searchRef.current) clearTimeout(searchRef.current)
+    searchRef.current = setTimeout(() => load(val), 400)
   }
 
-  async function deleteReport(id) {
-    if (!confirm('Xoá báo cáo này?')) return
+  async function viewItem(item) {
     try {
-      await api.deleteReport(id)
-      setReports((p) => p.filter((r) => r.id !== id))
-      if (selected?.id === id) setSelected(null)
-    } catch {}
+      let data
+      if (item.source === 'report') {
+        data = await api.getReport(Number(item.id))
+        setSelected({ ...item, content_html: data.content_html })
+      } else {
+        data = await api.getContentJob(item.id)
+        setSelected({ ...item, content_html: data.content_html })
+      }
+    } catch (_) {}
+  }
+
+  async function deleteItem(item, e) {
+    e.stopPropagation()
+    if (!confirm('Xoá mục này?')) return
+    try {
+      if (item.source === 'report') {
+        await api.deleteReport(Number(item.id))
+      }
+      setItems(p => p.filter(i => i.id !== item.id))
+      if (selected?.id === item.id) setSelected(null)
+    } catch (_) {}
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">📁 Lịch sử báo cáo</h1>
+    <div className="p-6 max-w-7xl mx-auto">
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">📁 Lịch sử</h1>
 
-      <div className="flex gap-2 mb-4">
-        {[
-          { v: '', l: 'Tất cả' },
-          { v: 'quick', l: '⚡ Quick Research' },
-          { v: 'full', l: '📊 Full Report' },
-        ].map((f) => (
+      {/* Filter bar */}
+      <div className="flex flex-wrap gap-2 mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={e => onSearchChange(e.target.value)}
+          placeholder="Tìm theo chủ đề..."
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <select
+          value={filterTax}
+          onChange={e => setFilterTax(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none"
+        >
+          <option value="">Tất cả sắc thuế</option>
+          {TAX_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      {/* Type filter pills */}
+      <div className="flex flex-wrap gap-1 mb-4">
+        {TYPE_FILTERS.map((f) => (
           <button
             key={f.v}
-            onClick={() => setFilter(f.v)}
+            onClick={() => setFilterType(f.v)}
             className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-              filter === f.v
+              filterType === f.v
                 ? 'bg-brand text-white border-brand'
                 : 'bg-white border-gray-300 text-gray-600 hover:border-brand'
             }`}
@@ -63,40 +119,50 @@ export default function Reports() {
 
       <div className="flex gap-4">
         {/* List */}
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className={`${selected ? 'w-80 shrink-0' : 'flex-1'} bg-white rounded-xl border border-gray-200 overflow-hidden`}>
           {loading ? (
             <div className="p-8 text-center text-gray-400">Đang tải...</div>
-          ) : reports.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">Không có báo cáo nào</div>
+          ) : items.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">Không có mục nào</div>
           ) : (
             <div className="divide-y divide-gray-50">
-              {reports.map((r) => (
+              {items.map((item) => (
                 <div
-                  key={r.id}
+                  key={item.id + item.source}
                   className={`px-4 py-3 cursor-pointer hover:bg-gray-50 flex items-center justify-between ${
-                    selected?.id === r.id ? 'bg-green-50 border-l-2 border-brand' : ''
+                    selected?.id === item.id && selected?.source === item.source
+                      ? 'bg-green-50 border-l-2 border-brand'
+                      : ''
                   }`}
-                  onClick={() => viewReport(r.id)}
+                  onClick={() => viewItem(item)}
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm text-gray-900 truncate">{r.title}</div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                      {r.report_type === 'quick' ? '⚡' : '📊'}{' '}
-                      {r.tax_types?.join(', ')} · {r.time_period || 'hiện tại'}
+                    <div className="font-medium text-sm text-gray-900 truncate">{item.subject}</div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      <span className="text-xs text-gray-500">
+                        {TYPE_LABELS[item.report_type] || item.report_type}
+                      </span>
+                      {(item.tax_types || []).map(t => (
+                        <span key={t} className="text-xs text-gray-400">· {t}</span>
+                      ))}
                     </div>
-                    <div className="text-xs text-gray-300">
-                      {r.created_at ? new Date(r.created_at).toLocaleString('vi-VN') : ''}
+                    <div className="flex gap-2 mt-0.5">
+                      {item.model_used && (
+                        <span className="text-xs text-gray-300">{item.model_used}</span>
+                      )}
+                      <span className="text-xs text-gray-300">
+                        {item.created_at_fmt || (item.created_at ? new Date(item.created_at).toLocaleString('vi-VN') : '')}
+                      </span>
                     </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteReport(r.id)
-                    }}
-                    className="ml-2 text-red-400 hover:text-red-600 text-xs"
-                  >
-                    Xoá
-                  </button>
+                  {item.source === 'report' && (
+                    <button
+                      onClick={(e) => deleteItem(item, e)}
+                      className="ml-2 text-red-400 hover:text-red-600 text-xs shrink-0"
+                    >
+                      Xoá
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -107,9 +173,15 @@ export default function Reports() {
         {selected && (
           <div className="flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <div className="font-semibold text-gray-800 text-sm truncate">{selected.title}</div>
-              <div className="flex gap-2 ml-2">
-                {selected.report_type === 'full' && (
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-gray-800 text-sm truncate">{selected.subject}</div>
+                <div className="text-xs text-gray-400 mt-0.5">
+                  {TYPE_LABELS[selected.report_type] || selected.report_type}
+                  {selected.model_used && ` · 🤖 ${selected.model_used}`}
+                </div>
+              </div>
+              <div className="flex gap-2 ml-2 shrink-0">
+                {selected.source === 'report' && selected.report_type === 'full' && (
                   <a
                     href={`/api/reports/${selected.id}/export-docx`}
                     className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"

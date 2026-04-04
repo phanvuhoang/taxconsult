@@ -140,9 +140,42 @@ export const api = {
   startContent: (data) => request('POST', '/content/start', data),
   getContentJob: (jobId) => request('GET', `/content/job/${jobId}`),
   cancelContentJob: (jobId) => request('POST', `/content/job/${jobId}/cancel`),
-  getContentHistory: (contentType) => request('GET', `/content/history?content_type=${contentType}`),
+  getContentHistory: (contentType, params = {}) => {
+    const q = new URLSearchParams({ content_type: contentType, ...params }).toString()
+    return request('GET', `/content/history?${q}`)
+  },
   requestContentGamma: (jobId, numSlides) => request('POST', `/content/job/${jobId}/gamma`, { num_slides: numSlides }),
   exportContentDocx: (jobId) => requestBlob('GET', `/content/job/${jobId}/export-docx`),
+
+  // References
+  listReferences: (params = {}) => {
+    const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString()
+    return request('GET', `/references${q ? '?' + q : ''}`)
+  },
+  addReference: (data) => request('POST', '/references/add', data),
+  uploadReference: async (file, meta = {}) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('tax_types', JSON.stringify(meta.tax_types || []))
+    form.append('form_type', meta.form_type || '')
+    form.append('tags', JSON.stringify(meta.tags || []))
+    form.append('title', meta.title || '')
+    const token = getToken()
+    const res = await fetch(`${BASE}/references/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }))
+      throw new Error(err.detail || 'Upload failed')
+    }
+    return res.json()
+  },
+  getReference: (id) => request('GET', `/references/${id}`),
+  updateReference: (id, data) => request('PATCH', `/references/${id}`, data),
+  deleteReference: (id) => request('DELETE', `/references/${id}`),
+  referenceGamma: (id, numSlides) => request('POST', `/references/${id}/gamma`, { num_slides: numSlides }),
 
   // Tax Docs — dbvntax browse
   browseDbvntax: (sac_thue, loai) => {

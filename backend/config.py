@@ -56,9 +56,9 @@ SECTOR_SECTIONS = [
     {"id": "s5", "title": "Các vấn đề thuế đặc thù", "enabled": True, "tax_aware": True,
      "sub": ["Rủi ro doanh thu/chi phí", "Chuyển giá", "Ưu đãi thuế",
              "Hóa đơn đặc thù", "Tranh chấp thuế", "Công văn hướng dẫn đặc thù"]},
-    {"id": "s6", "title": "Thông lệ thuế quốc tế", "enabled": True, "tax_aware": True,
+    {"id": "s6", "title": "Thông lệ thuế quốc tế", "enabled": True, "tax_aware": False,
      "sub": ["BEPS", "Chuyển giá quốc tế", "So sánh khu vực", "Hiệp định thuế"]},
-    {"id": "s7", "title": "Khuyến nghị & Kết luận", "enabled": True, "tax_aware": True,
+    {"id": "s7", "title": "Khuyến nghị & Kết luận", "enabled": True, "tax_aware": False,
      "sub": ["Tối ưu hóa thuế", "Tuân thủ", "Cơ hội ưu đãi", "Rủi ro cần theo dõi"]},
 ]
 
@@ -80,10 +80,10 @@ COMPANY_SECTIONS = [
              "Ưu đãi thuế đang áp dụng", "Hóa đơn đặc thù",
              "Tranh chấp thuế & án lệ liên quan",
              "Công văn/ruling đặc thù áp dụng cho công ty"]},
-    {"id": "c6", "title": "Tuân thủ & quản trị thuế", "enabled": True, "tax_aware": True,
+    {"id": "c6", "title": "Tuân thủ & quản trị thuế", "enabled": True, "tax_aware": False,
      "sub": ["Quy trình kê khai nội bộ", "Kiểm soát nội bộ về thuế",
              "Rủi ro xử phạt chậm nộp", "Nhân sự & năng lực thuế"]},
-    {"id": "c7", "title": "Khuyến nghị chiến lược thuế", "enabled": True, "tax_aware": True,
+    {"id": "c7", "title": "Khuyến nghị chiến lược thuế", "enabled": True, "tax_aware": False,
      "sub": ["Tối ưu hóa cấu trúc thuế", "Cơ hội ưu đãi chưa tận dụng",
              "Rủi ro cần theo dõi ngay", "Lộ trình cải thiện tuân thủ"]},
 ]

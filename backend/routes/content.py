@@ -103,6 +103,8 @@ async def get_content_job(
         "citations": job.citations or [],
         "gamma_url": job.gamma_url,
         "gamma_status": job.gamma_status,
+        "model_used": job.model_used or "",
+        "provider_used": job.provider_used or "",
     }
 
 
@@ -126,15 +128,22 @@ async def cancel_content_job(
 @router.get("/history")
 async def list_content_history(
     content_type: Optional[str] = None,
+    search: Optional[str] = None,
+    tax_type: Optional[str] = None,
+    limit: int = 50,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(ContentJob).where(
         ContentJob.user_id == user.id,
         ContentJob.status == "done",
-    ).order_by(ContentJob.created_at.desc()).limit(30)
+    ).order_by(ContentJob.created_at.desc()).limit(limit)
     if content_type:
         q = q.where(ContentJob.content_type == content_type)
+    if search:
+        q = q.where(ContentJob.subject.ilike(f"%{search}%"))
+    if tax_type:
+        q = q.where(ContentJob.tax_types.contains([tax_type]))
     result = await db.execute(q)
     jobs = result.scalars().all()
     return [
@@ -144,6 +153,7 @@ async def list_content_history(
             "subject": j.subject[:100],
             "created_at": j.created_at.strftime("%d/%m/%Y %H:%M") if j.created_at else "",
             "gamma_url": j.gamma_url,
+            "model_used": j.model_used or "",
         }
         for j in jobs
     ]
@@ -156,41 +166,30 @@ async def request_gamma(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger Gamma slide creation on demand."""
-    import os
-    import httpx as _httpx
+    """Trigger Gamma slide creation — dùng cùng logic với reports/gamma."""
     job = await db.get(ContentJob, job_id)
     if not job or job.status != "done" or not job.content_html:
         raise HTTPException(status_code=400, detail="Job chưa hoàn thành")
-
-    gamma_key = os.getenv("GAMMA_API_KEY", "")
-    if not gamma_key:
-        raise HTTPException(status_code=400, detail="GAMMA_API_KEY chưa cấu hình")
 
     num_cards = body.get("num_slides", 10)
     job.gamma_status = "processing"
     await db.commit()
 
+    from backend.routes.reports import _create_gamma_presentation
     try:
-        async with _httpx.AsyncClient(timeout=60) as client:
-            r = await client.post(
-                "https://api.gamma.app/v1/presentations",
-                headers={"Authorization": f"Bearer {gamma_key}",
-                         "Content-Type": "application/json"},
-                json={"title": job.subject[:100],
-                      "markdown": job.content_html[:50000],
-                      "numCards": num_cards},
-            )
-            r.raise_for_status()
-            data = r.json()
-        job.gamma_url = data.get("url", "")
+        gamma_url = await _create_gamma_presentation(
+            title=job.subject[:100],
+            html_content=job.content_html,
+            num_cards=num_cards,
+        )
+        job.gamma_url = gamma_url
         job.gamma_status = "done"
         await db.commit()
-        return {"gamma_url": job.gamma_url}
+        return {"gamma_url": gamma_url}
     except Exception as e:
         job.gamma_status = "error"
         await db.commit()
-        raise HTTPException(status_code=500, detail=f"Gamma error: {e}")
+        raise HTTPException(status_code=500, detail=f"Gamma error: {str(e)}")
 
 
 @router.get("/job/{job_id}/export-docx")
