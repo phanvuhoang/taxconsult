@@ -35,6 +35,8 @@ OPENROUTER_MODEL    = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
 OPENROUTER_MODEL2   = os.getenv("OPENROUTER_MODEL2", "")
 OPENROUTER_MODEL3   = os.getenv("OPENROUTER_MODEL3", "")
 OPENROUTER_MODEL4   = os.getenv("OPENROUTER_MODEL4", "")
+OPENROUTER_MODEL5   = os.getenv("OPENROUTER_MODEL5", "")
+OPENROUTER_MODEL6   = os.getenv("OPENROUTER_MODEL6", "")
 
 # Model tier → model name mapping
 # Claudible models: claude-haiku-4.5, claude-sonnet-4.6 (dấu chấm, KHÔNG dùng gạch ngang)
@@ -47,6 +49,8 @@ MODEL_MAP = {
     **({"qwen2": OPENROUTER_MODEL2} if OPENROUTER_MODEL2 else {}),
     **({"qwen3": OPENROUTER_MODEL3} if OPENROUTER_MODEL3 else {}),
     **({"qwen4": OPENROUTER_MODEL4} if OPENROUTER_MODEL4 else {}),
+    **({"qwen5": OPENROUTER_MODEL5} if OPENROUTER_MODEL5 else {}),
+    **({"qwen6": OPENROUTER_MODEL6} if OPENROUTER_MODEL6 else {}),
 }
 DEFAULT_MODEL_TIER = "deepseek"  # Default: DeepSeek Reasoner
 

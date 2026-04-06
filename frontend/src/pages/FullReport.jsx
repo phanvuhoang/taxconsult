@@ -214,6 +214,8 @@ export default function FullReport() {
         { key: 'openrouter_model2', tier: 'qwen2' },
         { key: 'openrouter_model3', tier: 'qwen3' },
         { key: 'openrouter_model4', tier: 'qwen4' },
+        { key: 'openrouter_model5', tier: 'qwen5' },
+        { key: 'openrouter_model6', tier: 'qwen6' },
       ]
       for (const { key, tier } of slots) {
         if (info?.[key]) {

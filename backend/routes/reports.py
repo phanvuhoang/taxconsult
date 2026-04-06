@@ -16,7 +16,7 @@ from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
 from backend.models import Report, ReportJob, User, ContentJob
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
-from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_MODEL2, OPENROUTER_MODEL3, OPENROUTER_MODEL4, OPENROUTER_API_KEY
+from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_MODEL2, OPENROUTER_MODEL3, OPENROUTER_MODEL4, OPENROUTER_MODEL5, OPENROUTER_MODEL6, OPENROUTER_API_KEY
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -57,6 +57,10 @@ async def get_model_info(user: User = Depends(get_current_user)):
             result["openrouter_model3"] = OPENROUTER_MODEL3
         if OPENROUTER_MODEL4:
             result["openrouter_model4"] = OPENROUTER_MODEL4
+        if OPENROUTER_MODEL5:
+            result["openrouter_model5"] = OPENROUTER_MODEL5
+        if OPENROUTER_MODEL6:
+            result["openrouter_model6"] = OPENROUTER_MODEL6
     return result
 
 
