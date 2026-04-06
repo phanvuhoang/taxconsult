@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api, downloadBlob } from '../api.js'
+import { modelDisplayName, modelIcon } from '../utils/modelDisplay.js'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD', 'QLT', 'HOA_DON', 'THUE_QT']
 const MODELS_STATIC = [
@@ -50,25 +51,17 @@ export default function ContentPage({
     loadHistory()
     api.getModelInfo().then((info) => {
       const extra = []
-      if (info?.openrouter_model) {
-        const raw = info.openrouter_model
-        const shortName = raw
-          .replace(/^[^/]+\//, '')
-          .replace(/:free$/, ' (free)')
-          .replace(/:(\w+)$/, ' ($1)')
-          .replace(/[-_]/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase())
-        extra.push({ value: 'qwen', label: `🌟 ${shortName}`, desc: `OpenRouter: ${raw}` })
-      }
-      if (info?.openrouter_model2) {
-        const raw2 = info.openrouter_model2
-        const shortName2 = raw2
-          .replace(/^[^/]+\//, '')
-          .replace(/:free$/, ' (free)')
-          .replace(/:(\w+)$/, ' ($1)')
-          .replace(/[-_]/g, ' ')
-          .replace(/\b\w/g, c => c.toUpperCase())
-        extra.push({ value: 'qwen2', label: `⭐ ${shortName2}`, desc: `OpenRouter: ${raw2}` })
+      const slots = [
+        { key: 'openrouter_model',  tier: 'qwen'  },
+        { key: 'openrouter_model2', tier: 'qwen2' },
+        { key: 'openrouter_model3', tier: 'qwen3' },
+        { key: 'openrouter_model4', tier: 'qwen4' },
+      ]
+      for (const { key, tier } of slots) {
+        if (info?.[key]) {
+          const raw = info[key]
+          extra.push({ value: tier, label: `${modelIcon(raw)} ${modelDisplayName(raw)}`, desc: `OpenRouter: ${raw}` })
+        }
       }
       if (extra.length > 0) {
         setModels([...MODELS_STATIC, ...extra])

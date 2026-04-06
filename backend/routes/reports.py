@@ -16,7 +16,7 @@ from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
 from backend.models import Report, ReportJob, User, ContentJob
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
-from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_API_KEY
+from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_MODEL2, OPENROUTER_MODEL3, OPENROUTER_MODEL4, OPENROUTER_API_KEY
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -47,11 +47,17 @@ class GammaRequest(BaseModel):
 @router.get("/model-info")
 async def get_model_info(user: User = Depends(get_current_user)):
     """Trả về thông tin model động từ env vars — frontend dùng để hiển thị tên."""
-    from backend.config import OPENROUTER_MODEL2
-    return {
-        "openrouter_model": OPENROUTER_MODEL if OPENROUTER_API_KEY else None,
-        "openrouter_model2": OPENROUTER_MODEL2 if (OPENROUTER_API_KEY and OPENROUTER_MODEL2) else None,
-    }
+    result = {}
+    if OPENROUTER_API_KEY:
+        if OPENROUTER_MODEL:
+            result["openrouter_model"] = OPENROUTER_MODEL
+        if OPENROUTER_MODEL2:
+            result["openrouter_model2"] = OPENROUTER_MODEL2
+        if OPENROUTER_MODEL3:
+            result["openrouter_model3"] = OPENROUTER_MODEL3
+        if OPENROUTER_MODEL4:
+            result["openrouter_model4"] = OPENROUTER_MODEL4
+    return result
 
 
 @router.get("")

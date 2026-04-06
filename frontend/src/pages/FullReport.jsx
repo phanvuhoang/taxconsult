@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { api, downloadBlob } from '../api.js'
+import { modelDisplayName, modelIcon } from '../utils/modelDisplay.js'
 import PeriodSelector from '../components/PeriodSelector.jsx'
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
@@ -208,19 +209,17 @@ export default function FullReport() {
   useEffect(() => {
     api.getModelInfo().then((info) => {
       const extra = []
-      const fmtName = (raw) => raw
-        .replace(/^[^/]+\//, '')
-        .replace(/:free$/, ' (free)')
-        .replace(/:(\w+)$/, ' ($1)')
-        .replace(/[-_]/g, ' ')
-        .replace(/\b\w/g, c => c.toUpperCase())
-      if (info?.openrouter_model) {
-        const raw = info.openrouter_model
-        extra.push({ value: 'qwen', label: `🌟 ${fmtName(raw)}`, desc: `OpenRouter: ${raw}` })
-      }
-      if (info?.openrouter_model2) {
-        const raw2 = info.openrouter_model2
-        extra.push({ value: 'qwen2', label: `⭐ ${fmtName(raw2)}`, desc: `OpenRouter: ${raw2}` })
+      const slots = [
+        { key: 'openrouter_model',  tier: 'qwen'  },
+        { key: 'openrouter_model2', tier: 'qwen2' },
+        { key: 'openrouter_model3', tier: 'qwen3' },
+        { key: 'openrouter_model4', tier: 'qwen4' },
+      ]
+      for (const { key, tier } of slots) {
+        if (info?.[key]) {
+          const raw = info[key]
+          extra.push({ value: tier, label: `${modelIcon(raw)} ${modelDisplayName(raw)}`, desc: `OpenRouter: ${raw}` })
+        }
       }
       if (extra.length > 0) {
         setModels([...MODELS_STATIC, ...extra])

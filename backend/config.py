@@ -30,19 +30,23 @@ APP_PORT = int(os.getenv("APP_PORT", "8000"))
 ALGORITHM = "HS256"
 
 # OpenRouter
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_MODEL   = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
-OPENROUTER_MODEL2  = os.getenv("OPENROUTER_MODEL2", "")   # Optional second OpenRouter model
+OPENROUTER_API_KEY  = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL    = os.getenv("OPENROUTER_MODEL", "qwen/qwen3.6-plus:free")
+OPENROUTER_MODEL2   = os.getenv("OPENROUTER_MODEL2", "")
+OPENROUTER_MODEL3   = os.getenv("OPENROUTER_MODEL3", "")
+OPENROUTER_MODEL4   = os.getenv("OPENROUTER_MODEL4", "")
 
 # Model tier → model name mapping
 # Claudible models: claude-haiku-4.5, claude-sonnet-4.6 (dấu chấm, KHÔNG dùng gạch ngang)
 MODEL_MAP = {
-    "haiku":    "claude-haiku-4.5",              # Claudible Haiku — fast, free
-    "fast":     "claude-sonnet-4.6",             # Claudible Sonnet — balanced, free
-    "strong":   "claude-sonnet-4.6",             # fallback to Sonnet (Opus not available on Claudible)
-    "deepseek": "deepseek-reasoner",             # DeepSeek V3.2 thinking mode
-    "qwen":     OPENROUTER_MODEL,                # OpenRouter model 1 — env OPENROUTER_MODEL
-    "qwen2":    OPENROUTER_MODEL2 or OPENROUTER_MODEL,  # OpenRouter model 2 — env OPENROUTER_MODEL2
+    "haiku":    "claude-haiku-4.5",
+    "fast":     "claude-sonnet-4.6",
+    "strong":   "claude-sonnet-4.6",
+    "deepseek": "deepseek-reasoner",
+    "qwen":     OPENROUTER_MODEL,
+    **({"qwen2": OPENROUTER_MODEL2} if OPENROUTER_MODEL2 else {}),
+    **({"qwen3": OPENROUTER_MODEL3} if OPENROUTER_MODEL3 else {}),
+    **({"qwen4": OPENROUTER_MODEL4} if OPENROUTER_MODEL4 else {}),
 }
 DEFAULT_MODEL_TIER = "deepseek"  # Default: DeepSeek Reasoner
 
