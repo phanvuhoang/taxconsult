@@ -200,7 +200,6 @@ export default function FullReport() {
   const [refOpen, setRefOpen] = useState(false)
 
   // Gamma
-  const [createGamma, setCreateGamma] = useState(true)
   const [numSlides, setNumSlides] = useState(20)
   const [gammaUrl, setGammaUrl] = useState('')
   const [gammaLoading, setGammaLoading] = useState(false)
@@ -409,14 +408,6 @@ export default function FullReport() {
             setReportId(data.report_id)
             if (data.citations?.length) setCitations(data.citations)
             setStatus('done')
-            // Auto-create Gamma if opted in
-            if (createGamma && data.html_content) {
-              setGammaLoading(true)
-              api.createGamma({ subject, html_content: data.html_content, num_cards: numSlides })
-                .then((r) => setGammaUrl(r.url || ''))
-                .catch(() => {})
-                .finally(() => setGammaLoading(false))
-            }
             // Refresh saved reports list
             api.listReports({ report_type: 'full', limit: 20 }).then(setSavedReports).catch(() => {})
           } else if (data.status === 'error') {
@@ -445,10 +436,24 @@ export default function FullReport() {
       const r = await api.getReport(id)
       setReportHtml(r.content_html || '')
       setReportId(r.id)
+      setGammaUrl(r.gamma_url || '')
       setStatus('done')
       setShowReports(false)
     } catch (e) {
       alert('Không thể tải báo cáo: ' + e.message)
+    }
+  }
+
+  async function handleCreateGamma() {
+    if (!reportHtml) return
+    setGammaLoading(true)
+    try {
+      const r = await api.createGamma({ subject, html_content: reportHtml, num_cards: numSlides })
+      setGammaUrl(r.url || '')
+    } catch (e) {
+      alert('Lỗi tạo Gamma: ' + e.message)
+    } finally {
+      setGammaLoading(false)
     }
   }
 
@@ -479,7 +484,7 @@ export default function FullReport() {
   }
 
   function openGamma() {
-    window.open('https://gamma.app/create', '_blank')
+    if (gammaUrl) window.open(gammaUrl, '_blank')
   }
 
   const progressPct = progress.total > 0
@@ -666,30 +671,6 @@ export default function FullReport() {
           </button>
         </div>
 
-        {/* Gamma option */}
-        <div className="mb-4 border rounded-lg p-3 bg-purple-50/30">
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={createGamma}
-                onChange={(e) => setCreateGamma(e.target.checked)}
-                className="accent-brand"
-              />
-              <span className="text-sm font-medium">✨ Tự động tạo Gamma Slides sau khi xong</span>
-            </label>
-            {createGamma && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Số slides:</span>
-                <input
-                  type="number" min={5} max={60} value={numSlides}
-                  onChange={(e) => setNumSlides(Number(e.target.value))}
-                  className="w-16 border rounded px-2 py-1 text-sm"
-                />
-              </div>
-            )}
-          </div>
-        </div>
 
         <div className="flex items-center gap-3">
           <button
@@ -762,7 +743,7 @@ export default function FullReport() {
                 </div>
 
                 {/* Export buttons */}
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap items-center">
                   <button
                     onClick={handleDownloadDocx}
                     disabled={exporting === 'docx'}
@@ -777,13 +758,35 @@ export default function FullReport() {
                   >
                     {exporting === 'slides' ? '⏳' : '🎞️'} Tạo Slides
                   </button>
-                  <button
-                    onClick={openGamma}
-                    title="Copy nội dung → paste vào Gamma để tạo slides đẹp hơn"
-                    className="text-sm px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-brand-dark"
-                  >
-                    ✨ Mở Gamma
-                  </button>
+                  {/* Gamma: Mở nếu đã có, Tạo nếu chưa có */}
+                  {gammaUrl ? (
+                    <a
+                      href={gammaUrl}
+                      target="_blank"
+                      rel="noopener"
+                      className="text-sm px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-brand-dark"
+                    >
+                      🎞️ Mở Gamma
+                    </a>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={handleCreateGamma}
+                        disabled={gammaLoading}
+                        className="text-sm px-3 py-1.5 rounded-lg bg-brand text-white hover:bg-brand-dark disabled:opacity-60"
+                      >
+                        {gammaLoading ? '⏳ Đang tạo...' : `✨ Tạo Gamma (${numSlides} slides)`}
+                      </button>
+                      <input
+                        type="number"
+                        min={5}
+                        max={60}
+                        value={numSlides}
+                        onChange={(e) => setNumSlides(Number(e.target.value))}
+                        className="w-14 border rounded px-2 py-1 text-xs"
+                      />
+                    </div>
+                  )}
                   <button
                     onClick={() => navigator.clipboard.writeText(reportHtml)}
                     className="text-sm text-brand hover:underline px-2"
@@ -792,22 +795,6 @@ export default function FullReport() {
                   </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Gamma result */}
-          {(gammaLoading || gammaUrl) && (
-            <div className="px-5 py-3 border-b border-gray-100 bg-purple-50/30">
-              {gammaLoading && <span className="text-sm text-purple-600">⏳ Đang tạo Gamma Slides...</span>}
-              {gammaUrl && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-purple-700">🎞️ Gamma Slides đã tạo:</span>
-                  <a href={gammaUrl} target="_blank" rel="noopener"
-                    className="text-brand font-medium text-sm hover:underline">
-                    Xem Slides →
-                  </a>
-                </div>
-              )}
             </div>
           )}
 
