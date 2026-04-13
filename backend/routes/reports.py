@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import os
 import re
 import time
 import uuid
@@ -373,36 +374,85 @@ async def export_slides(
     )
 
 
-async def _create_gamma_presentation(title: str, html_content: str, num_cards: int = 10) -> str:
-    """Tạo Gamma presentation và trả về URL. Dùng chung cho reports + content jobs."""
-    import os
-    import httpx as _httpx
-    from backend.doc_context import strip_html_tvpl
+GAMMA_API_URL = "https://public-api.gamma.app/v1.0/generations"
+
+
+async def _create_gamma_presentation(title: str, html_content: str, num_cards: int = 20) -> str:
+    """Tạo Gamma presentation qua public API, poll cho đến khi xong. Trả về gammaUrl."""
+    import re as _re
+    import asyncio as _asyncio
+    import aiohttp as _aiohttp
 
     gamma_key = os.getenv("GAMMA_API_KEY", "")
     if not gamma_key:
         raise ValueError("GAMMA_API_KEY not configured")
 
-    text_content = strip_html_tvpl(html_content)
+    # Strip HTML tags → plain text
+    plain_text = _re.sub(r'<[^>]+>', ' ', html_content)
+    plain_text = _re.sub(r'\s+', ' ', plain_text).strip()[:80000]
 
-    async with _httpx.AsyncClient(timeout=60) as client:
-        r = await client.post(
-            "https://api.gamma.app/v1/presentations",
-            headers={
-                "Authorization": f"Bearer {gamma_key}",
-                "Content-Type": "application/json",
+    payload = {
+        "inputText": f"# {title}\n\n{plain_text}",
+        "textMode": "condense",
+        "format": "presentation",
+        "numCards": min(num_cards, 60),
+        "cardSplit": "auto",
+        "additionalInstructions": (
+            "Phân tích nội dung một cách chi tiết và mạch lạc. "
+            "Vẽ các biểu đồ cần thiết. "
+            "Sử dụng tối đa image phù hợp để minh hoạ nội dung một cách phù hợp nhất. "
+            "Trình bày rõ ràng, minh họa tối đa bằng các sơ đồ, "
+            "sao cho thật dễ hiểu với các chuyên gia tư vấn Thuế, "
+            "kể cả những người mới đi làm hay đã đi làm lâu năm."
+        ),
+        "folderIds": ["m1b4lf5j12yd7ck"],
+        "exportAs": "pptx",
+        "textOptions": {
+            "amount": "extensive",
+            "tone": "professional, analytical",
+            "audience": "tax professionals, business executives",
+            "language": "vi",
+        },
+        "imageOptions": {
+            "source": "aiGenerated",
+            "model": "imagen-4-pro",
+            "style": "photorealistic, professional, corporate",
+        },
+        "cardOptions": {
+            "dimensions": "16x9",
+            "headerFooter": {
+                "bottomRight": {"type": "cardNumber"},
+                "hideFromFirstCard": True,
             },
-            json={
-                "title": title,
-                "text": text_content[:8000],
-                "num_cards": min(num_cards, 60),
-                "theme": "professional",
-                "language": "vi",
-            },
-        )
-        r.raise_for_status()
-        data = r.json()
-        return data.get("url") or data.get("id") or ""
+        },
+        "sharingOptions": {"externalAccess": "view"},
+    }
+    headers = {"Content-Type": "application/json", "X-API-KEY": gamma_key}
+
+    async with _aiohttp.ClientSession() as session:
+        async with session.post(GAMMA_API_URL, json=payload, headers=headers) as resp:
+            if resp.status not in (200, 201):
+                text = await resp.text()
+                raise Exception(f"Gamma API error {resp.status}: {text}")
+            data = await resp.json()
+            generation_id = data.get("generationId")
+            if not generation_id:
+                raise Exception(f"No generationId in response: {data}")
+
+        poll_url = f"{GAMMA_API_URL}/{generation_id}"
+        for _ in range(120):  # max 20 phút
+            await _asyncio.sleep(10)
+            async with session.get(poll_url, headers=headers) as resp:
+                if resp.status != 200:
+                    continue
+                result = await resp.json()
+                status = result.get("status")
+                if status == "completed":
+                    return result.get("gammaUrl", "")
+                elif status == "failed":
+                    raise Exception(f"Gamma generation failed: {result}")
+
+    raise Exception("Gamma generation timeout after 20 minutes")
 
 
 @router.post("/gamma")
