@@ -16,15 +16,23 @@ const MODELS_STATIC = [
   { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
   { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
 ]
-const DEFAULT_SECTIONS = [
-  { id: 's1', title: 'Tổng quan về ngành/doanh nghiệp', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
-  { id: 's2', title: 'Đặc thù kinh doanh', enabled: true, tax_aware: false, sub: ['Chuỗi cung ứng', 'Working capital cycle', 'Đặc điểm tài sản'] },
-  { id: 's3', title: 'Các quy định pháp lý', enabled: true, tax_aware: false, sub: ['Luật chuyên ngành', 'Điều kiện kinh doanh', 'Hạn chế FDI'] },
-  { id: 's4', title: 'Phân tích các loại thuế áp dụng', enabled: true, tax_aware: true, sub: ['Thuế TNDN', 'Thuế GTGT', 'Thuế Nhà thầu', 'Thuế TTĐB', 'Thuế XNK'] },
-  { id: 's5', title: 'Các vấn đề thuế đặc thù', enabled: true, tax_aware: true, sub: ['Rủi ro doanh thu/chi phí', 'Chuyển giá', 'Ưu đãi thuế', 'Hóa đơn đặc thù', 'Tranh chấp thuế'] },
-  { id: 's6', title: 'Thông lệ thuế quốc tế', enabled: true, tax_aware: false, sub: ['BEPS', 'Chuyển giá quốc tế', 'So sánh khu vực', 'Hiệp định thuế'] },
-  { id: 's7', title: 'Khuyến nghị & Kết luận', enabled: true, tax_aware: false, sub: ['Tối ưu hóa thuế', 'Tuân thủ', 'Cơ hội ưu đãi', 'Rủi ro cần theo dõi'] },
+const SECTOR_DEFAULT_SECTIONS = [
+  { id: 's1', title: 'Tổng quan về ngành', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
+  { id: 's2', title: 'Đặc thù của ngành', enabled: true, tax_aware: false, sub: ['Chuỗi cung ứng upstream/downstream', 'Working capital cycle', 'Đặc điểm tài sản'] },
+  { id: 's3', title: 'Sự phát triển tại Việt Nam & Big Players', enabled: true, tax_aware: false, sub: ['Tăng trưởng 5 năm gần nhất', 'Doanh nghiệp lớn nhất', 'FDI', 'M&A'] },
+  { id: 's4', title: 'Các quy định pháp lý quan trọng', enabled: true, tax_aware: false, sub: ['Luật chuyên ngành', 'Điều kiện kinh doanh', 'Giấy phép', 'Hạn chế FDI'] },
+  { id: 's5', title: 'Phân tích các loại thuế áp dụng', enabled: true, tax_aware: true, sub: ['Thuế TNDN', 'Thuế GTGT', 'Thuế Nhà thầu', 'Thuế TTĐB', 'Thuế XNK', 'Phí & lệ phí'] },
+  { id: 's6', title: 'Các vấn đề thuế đặc thù của ngành', enabled: true, tax_aware: true, sub: ['Rủi ro doanh thu/chi phí', 'Chuyển giá', 'Ưu đãi thuế', 'Hóa đơn đặc thù', 'Khấu trừ thuế', 'Tranh chấp thuế & án lệ', 'Công văn/hướng dẫn đặc thù của Tổng cục Thuế cho ngành'] },
+  { id: 's7', title: 'Thông lệ & vấn đề thuế quốc tế', enabled: true, tax_aware: false, sub: ['BEPS', 'Chuyển giá quốc tế', 'So sánh với khu vực', 'Hiệp định thuế'] },
 ]
+const COMPANY_DEFAULT_SECTIONS = [
+  { id: 'c1', title: 'Giới thiệu công ty', enabled: true, tax_aware: false, sub: ['Lịch sử hình thành', 'Cơ cấu sở hữu', 'Hoạt động kinh doanh chính'] },
+  { id: 'c2', title: 'Mô hình kinh doanh & chuỗi giá trị', enabled: true, tax_aware: false, sub: ['Sản phẩm/dịch vụ', 'Khách hàng mục tiêu', 'Nhà cung cấp', 'Chuỗi giá trị'] },
+  { id: 'c3', title: 'Phân tích tài chính & thuế', enabled: true, tax_aware: true, sub: ['Doanh thu & lợi nhuận', 'Gánh nặng thuế', 'Tỷ lệ thuế hiệu quả', 'So sánh ngành'] },
+  { id: 'c4', title: 'Rủi ro thuế đặc thù', enabled: true, tax_aware: true, sub: ['Rủi ro thanh tra', 'Chuyển giá', 'Cấu trúc pháp lý', 'Giao dịch liên kết', 'Tranh chấp thuế & lịch sử thanh/kiểm tra', 'Công văn/ruling đặc thù áp dụng cho công ty/ngành'] },
+  { id: 'c5', title: 'Khuyến nghị', enabled: true, tax_aware: false, sub: ['Tối ưu hóa thuế', 'Tuân thủ', 'Cơ hội ưu đãi', 'Rủi ro cần theo dõi'] },
+]
+const DEFAULT_SECTIONS = SECTOR_DEFAULT_SECTIONS
 const POLL_INTERVAL = 3000
 
 // ── SectionCard ──────────────────────────────────────────────────────────────
@@ -296,19 +304,13 @@ export default function FullReport() {
     setTaxTypes((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
   }
 
-  async function handleModeChange(newMode) {
+  function handleModeChange(newMode) {
     setMode(newMode)
-    try {
-      const data = await api.getDefaultSections(newMode)
-      if (data?.length) setSections(data)
-    } catch (e) { console.error(e) }
+    setSections(newMode === 'công ty' ? COMPANY_DEFAULT_SECTIONS : SECTOR_DEFAULT_SECTIONS)
   }
 
-  async function resetSections() {
-    try {
-      const data = await api.getDefaultSections(mode)
-      if (data?.length) setSections(data)
-    } catch (e) { console.error(e) }
+  function resetSections() {
+    setSections(mode === 'công ty' ? COMPANY_DEFAULT_SECTIONS : SECTOR_DEFAULT_SECTIONS)
   }
 
   function toggleTaxAware(id) {
