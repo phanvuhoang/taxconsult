@@ -13,6 +13,7 @@ CLAUDIBLE_API_KEY  = os.getenv("ANTHROPIC_AUTH_TOKEN", "")  # Bearer token
 
 # DeepSeek — OpenAI-compatible, endpoint: https://api.deepseek.com
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
 
 # Anthropic direct (paid, fallback)
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -44,7 +45,7 @@ MODEL_MAP = {
     "haiku":    "claude-haiku-4.5",
     "fast":     "claude-sonnet-4.6",
     "strong":   "claude-sonnet-4.6",
-    "deepseek": "deepseek-reasoner",
+    "deepseek": os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner"),
     "qwen":     OPENROUTER_MODEL,
     **({"qwen2": OPENROUTER_MODEL2} if OPENROUTER_MODEL2 else {}),
     **({"qwen3": OPENROUTER_MODEL3} if OPENROUTER_MODEL3 else {}),
