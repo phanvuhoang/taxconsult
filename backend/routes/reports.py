@@ -17,7 +17,7 @@ from backend.database import get_db, AsyncSessionLocal, DbvntaxSession
 from backend.models import Report, ReportJob, User, ContentJob
 from backend.auth import get_current_user
 from backend.ai_provider import call_ai
-from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_MODEL2, OPENROUTER_MODEL3, OPENROUTER_MODEL4, OPENROUTER_MODEL5, OPENROUTER_MODEL6, OPENROUTER_API_KEY
+from backend.config import DEFAULT_SECTIONS as CONFIG_SECTIONS, SECTOR_SECTIONS, COMPANY_SECTIONS, OPENROUTER_MODEL, OPENROUTER_MODEL2, OPENROUTER_MODEL3, OPENROUTER_MODEL4, OPENROUTER_MODEL5, OPENROUTER_MODEL6, OPENROUTER_API_KEY, DEEPSEEK_MODEL
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -49,6 +49,7 @@ class GammaRequest(BaseModel):
 async def get_model_info(user: User = Depends(get_current_user)):
     """Trả về thông tin model động từ env vars — frontend dùng để hiển thị tên."""
     result = {}
+    result["deepseek_model"] = DEEPSEEK_MODEL
     if OPENROUTER_API_KEY:
         if OPENROUTER_MODEL:
             result["openrouter_model"] = OPENROUTER_MODEL

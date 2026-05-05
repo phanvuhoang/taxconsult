@@ -4,10 +4,10 @@ import { modelDisplayName, modelIcon } from '../utils/modelDisplay.js'
 import PeriodSelector from '../components/PeriodSelector.jsx'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD', 'QLT', 'HOA_DON', 'THUE_QT']
-const MODELS_STATIC = [
-  { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
-  { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
-  { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
+const MODELS_BASE = [
+  { value: 'deepseek', label: '🧠 DeepSeek', desc: 'Phân tích sâu (mặc định)' },
+  { value: 'haiku',    label: '⚡ Claude Haiku', desc: 'Nhanh, tiết kiệm' },
+  { value: 'fast',     label: '🎯 Claude Sonnet', desc: 'Cân bằng' },
 ]
 
 export default function QuickResearch() {
@@ -15,7 +15,7 @@ export default function QuickResearch() {
   const [taxTypes, setTaxTypes] = useState(['TNDN'])
   const [period, setPeriod] = useState('hiện_nay')
   const [model, setModel] = useState('deepseek')
-  const [models, setModels] = useState(MODELS_STATIC)
+  const [models, setModels] = useState(MODELS_BASE)
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -27,6 +27,14 @@ export default function QuickResearch() {
     loadHistory()
     // Fetch dynamic model info (OpenRouter model từ env)
     api.getModelInfo().then((info) => {
+      let base = MODELS_BASE
+      if (info?.deepseek_model) {
+        base = MODELS_BASE.map(m =>
+          m.value === 'deepseek'
+            ? { ...m, label: `🧠 ${modelDisplayName(info.deepseek_model)}` }
+            : m
+        )
+      }
       const extra = []
       const slots = [
         { key: 'openrouter_model',  tier: 'qwen'  },
@@ -42,9 +50,7 @@ export default function QuickResearch() {
           extra.push({ value: tier, label: `${modelIcon(raw)} ${modelDisplayName(raw)}`, desc: `OpenRouter: ${raw}` })
         }
       }
-      if (extra.length > 0) {
-        setModels([...MODELS_STATIC, ...extra])
-      }
+      setModels([...base, ...extra])
     }).catch(() => {})
   }, [])
 
@@ -200,22 +206,17 @@ export default function QuickResearch() {
           {/* Model */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Model</label>
-            <div className="space-y-1">
-              {models.map((m) => (
-                <label key={m.value} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="model"
-                    value={m.value}
-                    checked={model === m.value}
-                    onChange={() => setModel(m.value)}
-                    className="accent-brand"
-                  />
-                  <span className="text-sm">{m.label}</span>
-                  <span className="text-xs text-gray-400">{m.desc}</span>
-                </label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-white"
+            >
+              {models.map(m => (
+                <option key={m.value} value={m.value}>
+                  {m.label} — {m.desc}
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
 

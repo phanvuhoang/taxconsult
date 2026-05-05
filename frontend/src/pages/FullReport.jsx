@@ -11,10 +11,10 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 const TAX_TYPES = ['TNDN', 'GTGT', 'TNCN', 'FCT', 'TTDB', 'XNK', 'TP', 'HKD', 'QLT', 'HOA_DON', 'THUE_QT']
-const MODELS_STATIC = [
-  { value: 'deepseek', label: '🧠 DeepSeek Reasoner', desc: 'Phân tích sâu (mặc định)' },
-  { value: 'haiku',    label: '⚡ Claude Haiku',      desc: 'Nhanh, tiết kiệm' },
-  { value: 'fast',     label: '🎯 Claude Sonnet',     desc: 'Cân bằng' },
+const MODELS_BASE = [
+  { value: 'deepseek', label: '🧠 DeepSeek', desc: 'Phân tích sâu (mặc định)' },
+  { value: 'haiku',    label: '⚡ Claude Haiku', desc: 'Nhanh, tiết kiệm' },
+  { value: 'fast',     label: '🎯 Claude Sonnet', desc: 'Cân bằng' },
 ]
 const SECTOR_DEFAULT_SECTIONS = [
   { id: 's1', title: 'Tổng quan về ngành', enabled: true, tax_aware: false, sub: ['Quy mô thị trường', 'Đặc điểm kinh doanh', 'Mô hình doanh thu/chi phí'] },
@@ -163,7 +163,7 @@ export default function FullReport() {
   const [sonar, setSonar] = useState('sonar-pro')
   const [sections, setSections] = useState(DEFAULT_SECTIONS)
   const [suggesting, setSuggesting] = useState(false)
-  const [models, setModels] = useState(MODELS_STATIC)
+  const [models, setModels] = useState(MODELS_BASE)
 
   // dnd-kit sensors
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }))
@@ -215,6 +215,14 @@ export default function FullReport() {
   // Fetch dynamic model info from backend (env-driven)
   useEffect(() => {
     api.getModelInfo().then((info) => {
+      let base = MODELS_BASE
+      if (info?.deepseek_model) {
+        base = MODELS_BASE.map(m =>
+          m.value === 'deepseek'
+            ? { ...m, label: `🧠 ${modelDisplayName(info.deepseek_model)}` }
+            : m
+        )
+      }
       const extra = []
       const slots = [
         { key: 'openrouter_model',  tier: 'qwen'  },
@@ -230,9 +238,7 @@ export default function FullReport() {
           extra.push({ value: tier, label: `${modelIcon(raw)} ${modelDisplayName(raw)}`, desc: `OpenRouter: ${raw}` })
         }
       }
-      if (extra.length > 0) {
-        setModels([...MODELS_STATIC, ...extra])
-      }
+      setModels([...base, ...extra])
     }).catch(() => {})
   }, [])
 
@@ -601,18 +607,17 @@ export default function FullReport() {
           {/* Model + Sonar */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Model AI</label>
-            <div className="space-y-1 mb-2">
-              {models.map((m) => (
-                <label key={m.value} className="flex items-center gap-2 cursor-pointer text-sm">
-                  <input type="radio" name="model" value={m.value}
-                    checked={model === m.value} onChange={() => setModel(m.value)}
-                    className="accent-brand"
-                  />
-                  <span>{m.label}</span>
-                  <span className="text-xs text-gray-400">{m.desc}</span>
-                </label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand bg-white mb-2"
+            >
+              {models.map(m => (
+                <option key={m.value} value={m.value}>
+                  {m.label} — {m.desc}
+                </option>
               ))}
-            </div>
+            </select>
             <label className="block text-xs font-medium text-gray-600 mb-1">Perplexity</label>
             <div className="flex gap-3 text-sm">
               {[{ v: 'sonar', l: 'Sonar' }, { v: 'sonar-pro', l: 'Sonar Pro ⭐' }].map((m) => (
