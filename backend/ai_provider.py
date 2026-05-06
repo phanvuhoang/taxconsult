@@ -20,7 +20,7 @@ async def call_ai(
     messages: list,
     system: str = "",
     model_tier: str = None,
-    max_tokens: int = 8000,
+    max_tokens: int = 16000,
 ) -> dict:
     """Non-streaming AI call. Returns dict: content, model_used, provider_used."""
     tier = model_tier or DEFAULT_MODEL_TIER
@@ -65,7 +65,7 @@ async def stream_ai(
     messages: list,
     system: str = "",
     model_tier: str = None,
-    max_tokens: int = 8000,
+    max_tokens: int = 16000,
 ) -> AsyncGenerator[str, None]:
     """Streaming AI call, yields text chunks."""
     tier = model_tier or DEFAULT_MODEL_TIER

@@ -650,7 +650,7 @@ async def run_report_job(job_id: str, body: FullReportRequest, user_id: int):
                         messages=[{"role": "user", "content": prompt}],
                         system=SECTION_SYSTEM,
                         model_tier=body.model_tier,
-                        max_tokens=8192,
+                        max_tokens=16384,
                     )
                     section_html = result["content"] if result else f"<h2>{section_number}. {section['title']}</h2><p>(Không thể tạo nội dung)</p>"
                     full_html += section_html + "\n"

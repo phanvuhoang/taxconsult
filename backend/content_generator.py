@@ -211,7 +211,7 @@ async def run_content_job(
                     messages=[{"role": "user", "content": prompt}],
                     system=SYSTEM,
                     model_tier=model_tier,
-                    max_tokens=6000,
+                    max_tokens=16000,
                 )
                 html = result.get("content", "")
                 if not html.startswith("<"):
